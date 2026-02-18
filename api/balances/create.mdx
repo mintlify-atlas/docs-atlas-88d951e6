@@ -1,0 +1,357 @@
+---
+title: 'Create Balance'
+description: 'Create a new balance for a specific feature for a customer'
+api: 'POST /balances/create'
+---
+
+Create a new balance for a specific feature for a customer. This allows you to grant feature access with specific limits, reset intervals, and expiration dates.
+
+## Request Body
+
+<ParamField body="feature_id" type="string" required>
+  The feature ID to create the balance for.
+  
+  ```
+  "api_calls"
+  ```
+</ParamField>
+
+<ParamField body="customer_id" type="string" required>
+  The customer ID to assign the balance to.
+  
+  ```
+  "cus_123"
+  ```
+</ParamField>
+
+<ParamField body="entity_id" type="string">
+  Entity ID for entity-scoped balances. Use this when creating balances for specific entities like workspaces or team members.
+  
+  ```
+  "entity_456"
+  ```
+</ParamField>
+
+<ParamField body="included" type="number">
+  The initial balance amount to grant. This is the starting quantity for the feature.
+  
+  ```
+  10000
+  ```
+</ParamField>
+
+<ParamField body="unlimited" type="boolean">
+  Whether the balance is unlimited. When true, the customer has unrestricted access to the feature.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField body="reset" type="object">
+  Reset configuration for the balance. Defines when and how the balance resets.
+  
+  <Expandable title="Reset Configuration">
+    <ParamField body="reset.interval" type="enum" required>
+      The reset interval.
+      
+      Options: `day`, `week`, `month`, `year`, `one_time`
+    </ParamField>
+    
+    <ParamField body="reset.interval_count" type="number">
+      Number of intervals between resets. For example, `2` with `month` means reset every 2 months.
+      
+      Default: `1`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="expires_at" type="number">
+  Unix timestamp (in milliseconds) when the balance expires. After this time, the balance is no longer valid.
+  
+  ```
+  1735689600000
+  ```
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Whether the balance creation was successful.
+  
+  ```
+  true
+  ```
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash cURL - Basic Balance
+curl -X POST https://api.useautumn.com/balances/create \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "feature_id": "api_calls",
+    "customer_id": "cus_123",
+    "included": 10000
+  }'
+```
+
+```bash cURL - Monthly Resetting Balance
+curl -X POST https://api.useautumn.com/balances/create \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "feature_id": "api_calls",
+    "customer_id": "cus_123",
+    "included": 10000,
+    "reset": {
+      "interval": "month",
+      "interval_count": 1
+    }
+  }'
+```
+
+```bash cURL - Unlimited Balance
+curl -X POST https://api.useautumn.com/balances/create \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "feature_id": "storage_gb",
+    "customer_id": "cus_123",
+    "unlimited": true
+  }'
+```
+
+```bash cURL - Entity-Scoped Balance
+curl -X POST https://api.useautumn.com/balances/create \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "feature_id": "projects",
+    "customer_id": "cus_123",
+    "entity_id": "workspace_789",
+    "included": 50,
+    "reset": {
+      "interval": "month"
+    }
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.useautumn.com/balances/create', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    feature_id: 'api_calls',
+    customer_id: 'cus_123',
+    included: 10000,
+    reset: {
+      interval: 'month',
+      interval_count: 1
+    }
+  })
+});
+
+const data = await response.json();
+console.log(data.success); // true
+```
+
+```python Python
+import requests
+
+response = requests.post(
+  'https://api.useautumn.com/balances/create',
+  headers={
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  json={
+    'feature_id': 'api_calls',
+    'customer_id': 'cus_123',
+    'included': 10000,
+    'reset': {
+      'interval': 'month',
+      'interval_count': 1
+    }
+  }
+)
+
+data = response.json()
+print(data['success'])
+```
+
+```typescript TypeScript
+interface CreateBalanceRequest {
+  feature_id: string;
+  customer_id: string;
+  entity_id?: string;
+  included?: number;
+  unlimited?: boolean;
+  reset?: {
+    interval: 'day' | 'week' | 'month' | 'year' | 'one_time';
+    interval_count?: number;
+  };
+  expires_at?: number;
+}
+
+interface CreateBalanceResponse {
+  success: boolean;
+}
+
+const createBalance = async (
+  params: CreateBalanceRequest
+): Promise<CreateBalanceResponse> => {
+  const response = await fetch('https://api.useautumn.com/balances/create', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(params)
+  });
+  
+  return await response.json();
+};
+
+const result = await createBalance({
+  feature_id: 'api_calls',
+  customer_id: 'cus_123',
+  included: 10000,
+  reset: {
+    interval: 'month'
+  }
+});
+```
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "success": true
+}
+```
+
+## Use Cases
+
+### Grant Trial Credits
+
+```javascript
+// Give trial users 1,000 API calls that don't reset
+await fetch('https://api.useautumn.com/balances/create', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    feature_id: 'api_calls',
+    customer_id: 'cus_123',
+    included: 1000,
+    expires_at: Date.now() + (14 * 24 * 60 * 60 * 1000) // 14 days
+  })
+});
+```
+
+### Monthly Storage Allowance
+
+```javascript
+// Create a monthly storage balance that resets
+await fetch('https://api.useautumn.com/balances/create', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    feature_id: 'storage_gb',
+    customer_id: 'cus_123',
+    included: 100,
+    reset: {
+      interval: 'month',
+      interval_count: 1
+    }
+  })
+});
+```
+
+### Unlimited Feature Access
+
+```javascript
+// Grant unlimited access to a premium feature
+await fetch('https://api.useautumn.com/balances/create', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    feature_id: 'advanced_analytics',
+    customer_id: 'cus_123',
+    unlimited: true
+  })
+});
+```
+
+### Workspace-Specific Balance
+
+```javascript
+// Create a balance for a specific workspace entity
+await fetch('https://api.useautumn.com/balances/create', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    feature_id: 'projects',
+    customer_id: 'cus_123',
+    entity_id: 'workspace_789',
+    included: 50,
+    reset: {
+      interval: 'month'
+    }
+  })
+});
+```
+
+## Important Notes
+
+<Warning>
+  **Feature Type Compatibility**: Different feature types have different balance requirements:
+  - **Boolean features**: Do not require `included` or `unlimited`
+  - **Metered features**: Must have either `included` amount or `unlimited: true`
+  - **Unlimited features**: Cannot have both `unlimited: true` and a `reset` interval
+</Warning>
+
+<Info>
+  **Entity Balances**: When creating entity-scoped balances, you must provide both `customer_id` and `entity_id`. The customer must already exist.
+</Info>
+
+<Tip>
+  **Expiration**: Use `expires_at` for temporary access grants, like trials or promotional credits. Timestamps should be in milliseconds.
+</Tip>
+
+<Tip>
+  **Reset Intervals**: Use reset intervals for features that should refresh periodically, like monthly API quotas or weekly report limits.
+</Tip>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Update Balance" icon="pen" href="/api/balances/update">
+    Update an existing balance
+  </Card>
+  <Card title="Track Usage" icon="chart-line" href="/api/track">
+    Record usage against balances
+  </Card>
+  <Card title="Check Access" icon="shield-check" href="/api/check">
+    Verify feature access and balances
+  </Card>
+  <Card title="Get Customer" icon="user" href="/api/customers/get">
+    Retrieve customer with balances
+  </Card>
+</CardGroup>

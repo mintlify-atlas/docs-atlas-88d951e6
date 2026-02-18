@@ -1,10 +1,10 @@
 ---
 title: 'Update Customer'
 description: 'Update an existing customer\'s information'
-api: 'PATCH /customers/{customer_id}'
+api: 'POST /customers/{customer_id}'
 ---
 
-Update customer details including their name, email, metadata, and preferences. You can also change the customer's unique identifier if needed.
+Update customer details including their name, email, metadata, and preferences using a POST request. You can also change the customer's unique identifier if needed.
 
 ## Path Parameters
 
@@ -166,7 +166,7 @@ Returns the updated customer object with all current values.
 
 <CodeGroup>
 ```bash cURL - Update Email
-curl -X PATCH https://api.autumn.ai/v1/customers/customer_12345 \
+curl -X POST https://api.useautumn.com/v1/customers/customer_12345 \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -175,7 +175,7 @@ curl -X PATCH https://api.autumn.ai/v1/customers/customer_12345 \
 ```
 
 ```bash cURL - Update Multiple Fields
-curl -X PATCH https://api.autumn.ai/v1/customers/customer_12345 \
+curl -X POST https://api.useautumn.com/v1/customers/customer_12345 \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{

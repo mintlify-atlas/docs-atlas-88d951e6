@@ -1,32 +1,58 @@
 ---
 title: 'List Customers'
 description: 'Retrieve a paginated list of all customers'
-api: 'GET /customers'
+api: 'POST /customers/list'
 ---
 
-Retrieve a paginated list of all customers in your Autumn account. Use this endpoint to browse customers, implement search functionality, or sync customer data with your systems.
+Retrieve a paginated list of all customers in your Autumn account. Use this endpoint to browse customers, implement search functionality, or sync customer data with your systems. This endpoint uses POST with a JSON body.
 
-## Query Parameters
+## Request Body
 
-<ParamField query="limit" type="integer" default={10}>
+<ParamField body="limit" type="integer" default={10}>
   Maximum number of customers to return per page. Must be between 10 and 100.
   
   ```
-  ?limit=50
+  50
   ```
 </ParamField>
 
-<ParamField query="offset" type="integer" default={0}>
+<ParamField body="offset" type="integer" default={0}>
   Number of customers to skip before returning results. Use this for pagination.
   
-  To get the second page with a limit of 50:
+  Example for second page with a limit of 50:
   ```
-  ?limit=50&offset=50
+  50
   ```
   
-  To get the third page:
+  Example for third page:
   ```
-  ?limit=50&offset=100
+  100
+  ```
+</ParamField>
+
+<ParamField body="plans" type="array">
+  Filter by plan ID and version. Returns customers with active subscriptions to this plan.
+  
+  <Expandable title="Plan Filter Object">
+    <ParamField body="plans[].id" type="string">
+      Plan ID to filter by
+    </ParamField>
+    
+    <ParamField body="plans[].versions" type="number[]">
+      Optional array of plan versions
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="subscription_status" type="enum">
+  Filter by customer product status. Options: `active`, `scheduled`. Defaults to active and scheduled.
+</ParamField>
+
+<ParamField body="search" type="string">
+  Search customers by id, name, or email.
+  
+  ```
+  "john@example.com"
   ```
 </ParamField>
 
@@ -102,13 +128,23 @@ Retrieve a paginated list of all customers in your Autumn account. Use this endp
 
 <CodeGroup>
 ```bash cURL - First Page
-curl -X GET "https://api.autumn.ai/v1/customers?limit=50&offset=0" \
-  -H "Authorization: Bearer YOUR_API_KEY"
+curl -X POST https://api.useautumn.com/v1/customers/list \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "limit": 50,
+    "offset": 0
+  }'
 ```
 
 ```bash cURL - Second Page
-curl -X GET "https://api.autumn.ai/v1/customers?limit=50&offset=50" \
-  -H "Authorization: Bearer YOUR_API_KEY"
+curl -X POST https://api.useautumn.com/v1/customers/list \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "limit": 50,
+    "offset": 50
+  }'
 ```
 
 ```javascript JavaScript SDK

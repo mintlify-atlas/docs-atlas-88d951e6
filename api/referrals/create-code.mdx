@@ -1,0 +1,322 @@
+---
+title: 'Create Referral Code'
+description: 'Create a referral code for a customer'
+api: 'POST /referrals/code'
+---
+
+Create a unique referral code for a customer that can be shared to refer new users to your product. When the code is redeemed, both the referrer and the new customer can receive rewards based on your referral program configuration.
+
+## Request Body
+
+<ParamField body="customer_id" type="string" required>
+  The unique identifier of the customer who will own this referral code.
+  
+  ```
+  "cus_123"
+  ```
+</ParamField>
+
+<ParamField body="program_id" type="string" required>
+  ID of your referral program. This determines the rewards and rules for the referral.
+  
+  ```
+  "prog_123"
+  ```
+</ParamField>
+
+## Response
+
+<ResponseField name="code" type="string">
+  The generated referral code. This is a unique string that can be shared with potential customers.
+  
+  ```
+  "REF123ABC"
+  ```
+</ResponseField>
+
+<ResponseField name="customer_id" type="string">
+  The ID of the customer who owns this referral code.
+  
+  ```
+  "cus_123"
+  ```
+</ResponseField>
+
+<ResponseField name="program_id" type="string">
+  The ID of the referral program.
+  
+  ```
+  "prog_123"
+  ```
+</ResponseField>
+
+<ResponseField name="created_at" type="number">
+  Unix timestamp (in milliseconds) when the code was created.
+  
+  ```
+  1709251200000
+  ```
+</ResponseField>
+
+<ResponseField name="redemptions" type="number">
+  Number of times this code has been redeemed.
+  
+  ```
+  0
+  ```
+</ResponseField>
+
+<ResponseField name="active" type="boolean">
+  Whether the referral code is currently active and can be used.
+  
+  ```
+  true
+  ```
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.useautumn.com/referrals/code \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "cus_123",
+    "program_id": "prog_123"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.useautumn.com/referrals/code', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    customer_id: 'cus_123',
+    program_id: 'prog_123'
+  })
+});
+
+const data = await response.json();
+console.log(data.code); // "REF123ABC"
+```
+
+```python Python
+import requests
+
+response = requests.post(
+  'https://api.useautumn.com/referrals/code',
+  headers={
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  json={
+    'customer_id': 'cus_123',
+    'program_id': 'prog_123'
+  }
+)
+
+data = response.json()
+print(data['code'])
+```
+
+```typescript TypeScript
+interface CreateReferralCodeRequest {
+  customer_id: string;
+  program_id: string;
+}
+
+interface ReferralCode {
+  code: string;
+  customer_id: string;
+  program_id: string;
+  created_at: number;
+  redemptions: number;
+  active: boolean;
+}
+
+const createReferralCode = async (
+  params: CreateReferralCodeRequest
+): Promise<ReferralCode> => {
+  const response = await fetch('https://api.useautumn.com/referrals/code', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(params)
+  });
+  
+  return await response.json();
+};
+
+const referralCode = await createReferralCode({
+  customer_id: 'cus_123',
+  program_id: 'prog_123'
+});
+
+console.log(`Share this code: ${referralCode.code}`);
+```
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "code": "REF123ABC",
+  "customer_id": "cus_123",
+  "program_id": "prog_123",
+  "created_at": 1709251200000,
+  "redemptions": 0,
+  "active": true
+}
+```
+
+## Use Cases
+
+### Generate Code on Sign-Up
+
+```javascript
+// Create a referral code when a customer signs up
+async function onCustomerSignUp(customerId) {
+  const referralCode = await fetch('https://api.useautumn.com/referrals/code', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      customer_id: customerId,
+      program_id: 'prog_default'
+    })
+  }).then(r => r.json());
+  
+  // Display code to user
+  return {
+    message: 'Welcome! Share your referral code to earn rewards.',
+    code: referralCode.code
+  };
+}
+```
+
+### User Dashboard Display
+
+```javascript
+// Show referral code in user dashboard
+async function getReferralCodeForUser(customerId) {
+  try {
+    // Try to create a new code (will return existing if one exists)
+    const referralCode = await fetch('https://api.useautumn.com/referrals/code', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer YOUR_API_KEY',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        customer_id: customerId,
+        program_id: 'prog_default'
+      })
+    }).then(r => r.json());
+    
+    return {
+      code: referralCode.code,
+      redemptions: referralCode.redemptions,
+      shareUrl: `https://yourapp.com/signup?ref=${referralCode.code}`
+    };
+  } catch (error) {
+    console.error('Failed to get referral code:', error);
+    return null;
+  }
+}
+```
+
+### Multiple Program Support
+
+```javascript
+// Create codes for different referral programs
+async function createProgramSpecificCode(customerId, programType) {
+  const programMap = {
+    'standard': 'prog_standard',
+    'enterprise': 'prog_enterprise',
+    'seasonal': 'prog_holiday_2024'
+  };
+  
+  const referralCode = await fetch('https://api.useautumn.com/referrals/code', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      customer_id: customerId,
+      program_id: programMap[programType]
+    })
+  }).then(r => r.json());
+  
+  return referralCode;
+}
+```
+
+### Track Code Performance
+
+```javascript
+// Get code and track in analytics
+async function trackReferralCode(customerId) {
+  const referralCode = await fetch('https://api.useautumn.com/referrals/code', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      customer_id: customerId,
+      program_id: 'prog_default'
+    })
+  }).then(r => r.json());
+  
+  // Track in your analytics
+  analytics.track('Referral Code Generated', {
+    customer_id: customerId,
+    code: referralCode.code,
+    program: referralCode.program_id
+  });
+  
+  return referralCode;
+}
+```
+
+## Important Notes
+
+<Info>
+  **Idempotency**: Creating a referral code for a customer who already has one for the same program will return the existing code instead of creating a duplicate.
+</Info>
+
+<Warning>
+  **Program Configuration**: Make sure your referral program is properly configured in the Autumn dashboard before creating codes. The program defines the rewards and rules.
+</Warning>
+
+<Tip>
+  **Code Format**: Referral codes are automatically generated as unique, easy-to-share strings. You can customize the format in your referral program settings.
+</Tip>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Redeem Referral Code" icon="gift" href="/api/referrals/redeem">
+    Redeem a referral code for a new customer
+  </Card>
+  <Card title="Create Customer" icon="user-plus" href="/api/customers/create">
+    Create a new customer
+  </Card>
+  <Card title="Get Customer" icon="user" href="/api/customers/get">
+    Retrieve customer details
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Referral Programs Guide](/guides/referral-programs)
+- [Customer API](/api/customers)

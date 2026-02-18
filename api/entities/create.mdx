@@ -10,7 +10,7 @@ Creates a new entity (such as a team member, workspace, or API key) that is link
 ## Endpoint
 
 ```
-POST /v1/entities
+POST /v1/customers/{customer_id}/entities
 ```
 
 ## Authentication
@@ -20,6 +20,12 @@ Requires a secret API key in the Authorization header:
 ```
 Authorization: Bearer your_secret_key
 ```
+
+## Path Parameters
+
+<ParamField path="customer_id" type="string" required>
+  The ID of the customer to create the entity for.
+</ParamField>
 
 ## Request Body
 
@@ -106,16 +112,13 @@ Authorization: Bearer your_secret_key
 <CodeGroup>
 
 ```bash curl
-curl -X POST https://api.useautumn.com/v1/entities \
+curl -X POST https://api.useautumn.com/v1/customers/team_123/entities \
   -H "Authorization: Bearer sk_test_..." \
   -H "Content-Type: application/json" \
   -d '{
     "id": "user_456",
     "name": "Alice Johnson",
-    "feature_id": "team_seats",
-    "customer_data": {
-      "id": "team_123"
-    }
+    "feature_id": "team_seats"
   }'
 ```
 
@@ -126,13 +129,10 @@ const autumn = new Autumn({
   secretKey: 'sk_test_...'
 });
 
-const entity = await autumn.entities.create({
+const entity = await autumn.entities.create('team_123', {
   id: 'user_456',
   name: 'Alice Johnson',
-  featureId: 'team_seats',
-  customerData: {
-    id: 'team_123'
-  }
+  featureId: 'team_seats'
 });
 
 console.log(entity.id); // "user_456"
@@ -145,13 +145,10 @@ const autumn = new Autumn({
   secretKey: process.env.AUTUMN_SECRET_KEY!
 });
 
-const entity = await autumn.entities.create({
+const entity = await autumn.entities.create('team_123', {
   id: 'user_456',
   name: 'Alice Johnson',
-  featureId: 'team_seats',
-  customerData: {
-    id: 'team_123'
-  }
+  featureId: 'team_seats'
 });
 ```
 
@@ -159,7 +156,7 @@ const entity = await autumn.entities.create({
 import requests
 
 response = requests.post(
-    'https://api.useautumn.com/v1/entities',
+    'https://api.useautumn.com/v1/customers/team_123/entities',
     headers={
         'Authorization': 'Bearer sk_test_...',
         'Content-Type': 'application/json',
@@ -167,10 +164,7 @@ response = requests.post(
     json={
         'id': 'user_456',
         'name': 'Alice Johnson',
-        'feature_id': 'team_seats',
-        'customer_data': {
-            'id': 'team_123'
-        }
+        'feature_id': 'team_seats'
     }
 )
 

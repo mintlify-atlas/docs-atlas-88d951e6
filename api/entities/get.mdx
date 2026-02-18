@@ -10,7 +10,7 @@ Retrieves detailed information about a specific entity, including its relationsh
 ## Endpoint
 
 ```
-GET /v1/entities/{entity_id}
+GET /v1/customers/{customer_id}/entities/{entity_id}
 ```
 
 ## Authentication
@@ -22,6 +22,10 @@ Authorization: Bearer your_api_key
 ```
 
 ## Path Parameters
+
+<ParamField path="customer_id" type="string" required>
+  The ID of the customer who owns the entity.
+</ParamField>
 
 <ParamField path="entity_id" type="string" required>
   The unique identifier of the entity to retrieve
@@ -133,12 +137,12 @@ Authorization: Bearer your_api_key
 <CodeGroup>
 
 ```bash curl
-curl -X GET "https://api.useautumn.com/v1/entities/user_456" \
+curl -X GET "https://api.useautumn.com/v1/customers/team_123/entities/user_456" \
   -H "Authorization: Bearer sk_test_..."
 ```
 
 ```bash curl (with expansion)
-curl -X GET "https://api.useautumn.com/v1/entities/user_456?expand=invoices&expand=subscriptions.plan" \
+curl -X GET "https://api.useautumn.com/v1/customers/team_123/entities/user_456?expand=invoices&expand=subscriptions.plan" \
   -H "Authorization: Bearer sk_test_..."
 ```
 
@@ -149,7 +153,7 @@ const autumn = new Autumn({
   secretKey: 'sk_test_...'
 });
 
-const entity = await autumn.entities.get('user_456');
+const entity = await autumn.entities.get('team_123', 'user_456');
 
 console.log(entity.name); // "Alice Johnson"
 console.log(entity.feature_id); // "team_seats"
@@ -162,7 +166,7 @@ const autumn = new Autumn({
   secretKey: 'sk_test_...'
 });
 
-const entity = await autumn.entities.get('user_456', {
+const entity = await autumn.entities.get('team_123', 'user_456', {
   expand: ['invoices', 'subscriptions.plan']
 });
 
@@ -177,14 +181,14 @@ const autumn = new Autumn({
   secretKey: process.env.AUTUMN_SECRET_KEY!
 });
 
-const entity = await autumn.entities.get('user_456');
+const entity = await autumn.entities.get('team_123', 'user_456');
 ```
 
 ```python Python
 import requests
 
 response = requests.get(
-    'https://api.useautumn.com/v1/entities/user_456',
+    'https://api.useautumn.com/v1/customers/team_123/entities/user_456',
     headers={
         'Authorization': 'Bearer sk_test_...',
     }

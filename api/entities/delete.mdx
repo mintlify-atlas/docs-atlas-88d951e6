@@ -10,7 +10,7 @@ Deletes an entity (soft delete by default), freeing up capacity and adjusting bi
 ## Endpoint
 
 ```
-DELETE /v1/entities/{entity_id}
+DELETE /v1/customers/{customer_id}/entities/{entity_id}
 ```
 
 ## Authentication
@@ -22,6 +22,10 @@ Authorization: Bearer your_secret_key
 ```
 
 ## Path Parameters
+
+<ParamField path="customer_id" type="string" required>
+  The ID of the customer who owns the entity.
+</ParamField>
 
 <ParamField path="entity_id" type="string" required>
   The unique identifier of the entity to delete
@@ -52,12 +56,12 @@ Authorization: Bearer your_secret_key
 <CodeGroup>
 
 ```bash curl (soft delete)
-curl -X DELETE https://api.useautumn.com/v1/entities/user_456 \
+curl -X DELETE https://api.useautumn.com/v1/customers/team_123/entities/user_456 \
   -H "Authorization: Bearer sk_test_..."
 ```
 
 ```bash curl (hard delete)
-curl -X DELETE "https://api.useautumn.com/v1/entities/user_456?hard_delete=true" \
+curl -X DELETE "https://api.useautumn.com/v1/customers/team_123/entities/user_456?hard_delete=true" \
   -H "Authorization: Bearer sk_test_..."
 ```
 
@@ -69,7 +73,7 @@ const autumn = new Autumn({
 });
 
 // Soft delete (default)
-const result = await autumn.entities.delete('user_456');
+const result = await autumn.entities.delete('team_123', 'user_456');
 
 console.log(result.success); // true
 ```
@@ -82,7 +86,7 @@ const autumn = new Autumn({
 });
 
 // Permanently delete
-const result = await autumn.entities.delete('user_456', {
+const result = await autumn.entities.delete('team_123', 'user_456', {
   hardDelete: true
 });
 ```
@@ -94,14 +98,14 @@ const autumn = new Autumn({
   secretKey: process.env.AUTUMN_SECRET_KEY!
 });
 
-const result = await autumn.entities.delete('user_456');
+const result = await autumn.entities.delete('team_123', 'user_456');
 ```
 
 ```python Python
 import requests
 
 response = requests.delete(
-    'https://api.useautumn.com/v1/entities/user_456',
+    'https://api.useautumn.com/v1/customers/team_123/entities/user_456',
     headers={
         'Authorization': 'Bearer sk_test_...',
     }
