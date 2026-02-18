@@ -1,0 +1,162 @@
+{
+  "projectType": "api-service",
+  "projectName": "Autumn",
+  "projectDescription": "Open-source pricing and billing platform that sits between Stripe and your application",
+  "theme": "maple",
+  "primaryColor": "#FF6B35",
+  "lightColor": "#FFA07A",
+  "darkColor": "#CC5528",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "self-hosting"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/products",
+              "concepts/plans",
+              "concepts/features",
+              "concepts/customers",
+              "concepts/entities",
+              "concepts/pricing-models"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/usage-based-billing",
+              "guides/credit-systems",
+              "guides/subscriptions",
+              "guides/seat-based-pricing",
+              "guides/webhooks",
+              "guides/stripe-integration"
+            ]
+          },
+          {
+            "group": "SDKs",
+            "pages": [
+              "sdks/javascript",
+              "sdks/react",
+              "sdks/rest-api"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Operations",
+            "pages": [
+              "api/attach",
+              "api/check",
+              "api/track",
+              "api/cancel"
+            ]
+          },
+          {
+            "group": "Billing",
+            "pages": [
+              "api/checkout",
+              "api/setup-payment",
+              "api/billing-portal",
+              "api/query"
+            ]
+          },
+          {
+            "group": "Customers",
+            "pages": [
+              "api/customers/create",
+              "api/customers/get",
+              "api/customers/update",
+              "api/customers/list",
+              "api/customers/delete"
+            ]
+          },
+          {
+            "group": "Products & Plans",
+            "pages": [
+              "api/products/create",
+              "api/products/get",
+              "api/products/update",
+              "api/products/list",
+              "api/products/delete"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "api/features/create",
+              "api/features/get",
+              "api/features/update",
+              "api/features/list",
+              "api/features/delete"
+            ]
+          },
+          {
+            "group": "Entities",
+            "pages": [
+              "api/entities/create",
+              "api/entities/get",
+              "api/entities/update",
+              "api/entities/list",
+              "api/entities/delete"
+            ]
+          },
+          {
+            "group": "Events",
+            "pages": [
+              "api/events/list",
+              "api/events/aggregate"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Usage-based billing and metering",
+    "Credit systems with top-ups",
+    "Flexible subscription management",
+    "Seat-based pricing with per-seat limits",
+    "Real-time access control",
+    "Stripe integration",
+    "Custom pricing for enterprise",
+    "Webhook event system"
+  ],
+  "publicApiSurface": [
+    "POST /attach - Attach products to customers",
+    "POST /check - Check feature access and balances",
+    "POST /track - Record usage events",
+    "POST /cancel - Cancel customer subscriptions",
+    "POST /checkout - Create checkout sessions",
+    "POST /setup_payment - Setup payment methods",
+    "POST /customers/{customer_id}/billing_portal - Access billing portal",
+    "POST /query - Query usage analytics",
+    "GET /customers - List customers",
+    "POST /customers - Create customer",
+    "GET /customers/{customer_id} - Get customer",
+    "PATCH /customers/{customer_id} - Update customer",
+    "DELETE /customers/{customer_id} - Delete customer",
+    "GET /products - List products/plans",
+    "POST /products - Create product",
+    "GET /products/{product_id} - Get product",
+    "PATCH /products/{product_id} - Update product",
+    "DELETE /products/{product_id} - Delete product",
+    "GET /features - List features",
+    "POST /features - Create feature",
+    "GET /entities - List entities",
+    "POST /entities - Create entity",
+    "GET /events - List usage events",
+    "POST /events/aggregate - Aggregate events"
+  ]
+}
