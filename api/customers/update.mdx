@@ -1,0 +1,305 @@
+---
+title: 'Update Customer'
+description: 'Update an existing customer\'s information'
+api: 'PATCH /customers/{customer_id}'
+---
+
+Update customer details including their name, email, metadata, and preferences. You can also change the customer's unique identifier if needed.
+
+## Path Parameters
+
+<ParamField path="customer_id" type="string" required>
+  The current unique identifier of the customer to update.
+  
+  ```
+  "customer_12345"
+  ```
+</ParamField>
+
+## Request Body
+
+All fields are optional. Only include the fields you want to update.
+
+<ParamField body="id" type="string">
+  New unique identifier for the customer. Must contain only letters, numbers, underscores, and hyphens. Use this to rename the customer ID.
+  
+  <Warning>Changing the customer ID will affect all references to this customer in your system.</Warning>
+  
+  ```
+  "customer_new_id"
+  ```
+</ParamField>
+
+<ParamField body="name" type="string | null">
+  Customer's name. Set to `null` to remove the name.
+  
+  ```
+  "Jane Smith"
+  ```
+</ParamField>
+
+<ParamField body="email" type="string | null">
+  Customer's email address. Must be a valid email format. Set to `null` to remove the email.
+  
+  ```
+  "jane.smith@example.com"
+  ```
+</ParamField>
+
+<ParamField body="fingerprint" type="string | null">
+  Device or hardware fingerprint for duplicate detection. Update this if the customer is using a new device.
+  
+  ```
+  "fp_new_device_xyz"
+  ```
+</ParamField>
+
+<ParamField body="metadata" type="object | null">
+  Custom key-value pairs to store with the customer. This completely replaces the existing metadata object. Set to `null` to remove all metadata.
+  
+  <Info>To merge with existing metadata, first retrieve the customer, modify the metadata object, then send the complete updated object.</Info>
+  
+  ```json
+  {
+    "company": "New Company Inc",
+    "plan_tier": "premium",
+    "updated_at": "2024-01-01"
+  }
+  ```
+</ParamField>
+
+<ParamField body="stripe_id" type="string | null">
+  Stripe customer ID. Use this to link or update the Stripe customer association.
+  
+  ```
+  "cus_NewStripeId"
+  ```
+</ParamField>
+
+<ParamField body="create_in_stripe" type="boolean">
+  Whether to create a corresponding customer in Stripe if one doesn't exist.
+</ParamField>
+
+<ParamField body="auto_enable_plan_id" type="string">
+  ID of a free plan to automatically enable for this customer.
+</ParamField>
+
+<ParamField body="send_email_receipts" type="boolean">
+  Whether to send email receipts to this customer for transactions and invoices.
+  
+  ```
+  true
+  ```
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="expand" type="string[]">
+  Array of related resources to include in the response.
+  
+  Available options:
+  - `invoices`
+  - `entities`
+  - `trials_used`
+  - `rewards`
+  - `referrals`
+  - `payment_method`
+  
+  ```
+  ?expand=subscriptions,payment_method
+  ```
+</ParamField>
+
+## Response
+
+Returns the updated customer object with all current values.
+
+<ResponseField name="id" type="string">
+  The customer's unique identifier (updated if changed).
+</ResponseField>
+
+<ResponseField name="name" type="string | null">
+  Customer's name.
+</ResponseField>
+
+<ResponseField name="email" type="string | null">
+  Customer's email address.
+</ResponseField>
+
+<ResponseField name="created_at" type="number">
+  Unix timestamp when the customer was created (unchanged).
+</ResponseField>
+
+<ResponseField name="fingerprint" type="string | null">
+  Device fingerprint.
+</ResponseField>
+
+<ResponseField name="stripe_id" type="string | null">
+  Associated Stripe customer ID.
+</ResponseField>
+
+<ResponseField name="env" type="string">
+  Environment: `production` or `development`.
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Custom metadata key-value pairs.
+</ResponseField>
+
+<ResponseField name="send_email_receipts" type="boolean">
+  Email receipt preference.
+</ResponseField>
+
+<ResponseField name="subscriptions" type="array">
+  Array of active subscriptions.
+</ResponseField>
+
+<ResponseField name="scheduled_subscriptions" type="array">
+  Array of scheduled subscriptions.
+</ResponseField>
+
+<ResponseField name="balances" type="object">
+  Current balance amounts for features.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash cURL - Update Email
+curl -X PATCH https://api.autumn.ai/v1/customers/customer_12345 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "newemail@example.com"
+  }'
+```
+
+```bash cURL - Update Multiple Fields
+curl -X PATCH https://api.autumn.ai/v1/customers/customer_12345 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Smith",
+    "email": "jane.smith@newcompany.com",
+    "metadata": {
+      "company": "New Company Inc",
+      "role": "Admin"
+    },
+    "send_email_receipts": false
+  }'
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@autumn.ai/sdk';
+
+const autumn = new Autumn({ apiKey: 'YOUR_API_KEY' });
+
+// Update email only
+const customer = await autumn.customers.update('customer_12345', {
+  email: 'newemail@example.com'
+});
+
+// Update multiple fields
+const updatedCustomer = await autumn.customers.update('customer_12345', {
+  name: 'Jane Smith',
+  email: 'jane@newcompany.com',
+  metadata: {
+    company: 'New Company Inc',
+    role: 'Admin'
+  },
+  sendEmailReceipts: false
+});
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@autumn.ai/sdk';
+
+const autumn = new Autumn({ apiKey: 'YOUR_API_KEY' });
+
+const updatedCustomer = await autumn.customers.update('customer_12345', {
+  name: 'Jane Smith',
+  metadata: {
+    ...existingCustomer.metadata,
+    plan_tier: 'enterprise',
+    updated_at: new Date().toISOString()
+  }
+});
+```
+
+```python Python SDK
+from autumn import Autumn
+
+autumn = Autumn(api_key="YOUR_API_KEY")
+
+# Update email
+customer = autumn.customers.update(
+    "customer_12345",
+    email="newemail@example.com"
+)
+
+# Update multiple fields
+updated_customer = autumn.customers.update(
+    "customer_12345",
+    name="Jane Smith",
+    email="jane@newcompany.com",
+    metadata={
+        "company": "New Company Inc",
+        "role": "Admin"
+    },
+    send_email_receipts=False
+)
+```
+</CodeGroup>
+
+## Common Use Cases
+
+### Update customer email
+```json
+{
+  "email": "newemail@example.com"
+}
+```
+
+### Update metadata while preserving existing fields
+First retrieve the customer, then merge metadata:
+```javascript
+const customer = await autumn.customers.get('customer_12345');
+const updated = await autumn.customers.update('customer_12345', {
+  metadata: {
+    ...customer.metadata,
+    plan_tier: 'premium',
+    last_updated: Date.now()
+  }
+});
+```
+
+### Change customer ID
+```json
+{
+  "id": "customer_new_id_456"
+}
+```
+
+### Disable email receipts
+```json
+{
+  "send_email_receipts": false
+}
+```
+
+### Update Stripe association
+```json
+{
+  "stripe_id": "cus_NewStripeCustomerId"
+}
+```
+
+## Notes
+
+<Warning>
+  **Metadata Replacement**: The metadata field completely replaces the existing metadata. To preserve existing keys, fetch the customer first and merge the metadata objects.
+</Warning>
+
+<Info>
+  **Partial Updates**: You only need to include the fields you want to change. Omitted fields will remain unchanged.
+</Info>

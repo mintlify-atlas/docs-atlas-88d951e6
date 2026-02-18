@@ -1,0 +1,279 @@
+---
+title: 'Get Feature'
+description: 'Retrieve a specific feature by ID'
+---
+
+# Get Feature
+
+Retrieve detailed information about a specific feature by its ID.
+
+## Endpoint
+
+```
+GET /features/{feature_id}
+```
+
+## Path Parameters
+
+<ParamField path="feature_id" type="string" required>
+  The unique identifier of the feature to retrieve.
+  
+  **Example:** `api_calls`, `team_seats`, `storage_gb`
+</ParamField>
+
+## Response
+
+Returns the feature object if found.
+
+<ResponseField name="id" type="string">
+  The unique identifier of the feature.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The human-readable name of the feature.
+</ResponseField>
+
+<ResponseField name="type" type="enum">
+  The feature type. One of:
+  - `boolean` - Simple access control
+  - `single_use` - Consumable resources
+  - `continuous_use` - Allocated resources
+  - `credit_system` - Unified credit pool
+</ResponseField>
+
+<ResponseField name="consumable" type="boolean">
+  Whether the feature is consumable.
+  
+  - `true` - Usage is consumed and decrements (e.g., API tokens, credits)
+  - `false` - Usage is allocated and doesn't decrement (e.g., seats, storage)
+</ResponseField>
+
+<ResponseField name="display" type="object">
+  Display names for the feature in your UI.
+  
+  <Expandable title="Display Object">
+    <ResponseField name="singular" type="string">
+      Singular form of the feature name.
+      
+      **Example:** `API call`, `seat`, `credit`
+    </ResponseField>
+    
+    <ResponseField name="plural" type="string">
+      Plural form of the feature name.
+      
+      **Example:** `API calls`, `seats`, `credits`
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="event_names" type="array">
+  Array of event names that trigger usage tracking for this feature.
+  
+  **Example:** `["api.request", "api.call"]`
+</ResponseField>
+
+<ResponseField name="credit_schema" type="array">
+  Credit cost schema. Only present for `credit_system` features.
+  
+  <Expandable title="Credit Schema">
+    <ResponseField name="metered_feature_id" type="string">
+      The ID of the metered feature.
+    </ResponseField>
+    
+    <ResponseField name="credit_cost" type="number">
+      The credit cost per unit of the metered feature.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="archived" type="boolean">
+  Whether the feature is archived. Archived features are hidden from the dashboard and list endpoints.
+</ResponseField>
+
+## Examples
+
+### Get Boolean Feature
+
+**Request:**
+```bash
+curl -X GET "https://api.autumn.sh/features/priority_support" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Response:**
+```json
+{
+  "id": "priority_support",
+  "name": "Priority Support",
+  "type": "boolean",
+  "consumable": false,
+  "display": {
+    "singular": "Priority Support",
+    "plural": "Priority Support"
+  },
+  "archived": false
+}
+```
+
+### Get Metered Feature (Single Use)
+
+**Request:**
+```bash
+curl -X GET "https://api.autumn.sh/features/api_calls" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Response:**
+```json
+{
+  "id": "api_calls",
+  "name": "API Calls",
+  "type": "single_use",
+  "consumable": true,
+  "event_names": ["api.request"],
+  "display": {
+    "singular": "API call",
+    "plural": "API calls"
+  },
+  "archived": false
+}
+```
+
+### Get Credit System Feature
+
+**Request:**
+```bash
+curl -X GET "https://api.autumn.sh/features/ai_credits" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Response:**
+```json
+{
+  "id": "ai_credits",
+  "name": "AI Credits",
+  "type": "credit_system",
+  "consumable": true,
+  "credit_schema": [
+    {
+      "metered_feature_id": "gpt4_requests",
+      "credit_cost": 10
+    },
+    {
+      "metered_feature_id": "gpt35_requests",
+      "credit_cost": 2
+    },
+    {
+      "metered_feature_id": "image_generation",
+      "credit_cost": 5
+    }
+  ],
+  "display": {
+    "singular": "credit",
+    "plural": "credits"
+  },
+  "archived": false
+}
+```
+
+### Get Continuous Use Feature
+
+**Request:**
+```bash
+curl -X GET "https://api.autumn.sh/features/team_seats" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Response:**
+```json
+{
+  "id": "team_seats",
+  "name": "Team Seats",
+  "type": "continuous_use",
+  "consumable": false,
+  "event_names": ["team.member_added"],
+  "display": {
+    "singular": "seat",
+    "plural": "seats"
+  },
+  "archived": false
+}
+```
+
+## Response Codes
+
+- `200` - Feature retrieved successfully
+- `401` - Unauthorized (invalid API key)
+- `404` - Feature not found
+
+## Error Response
+
+If the feature is not found:
+
+```json
+{
+  "message": "Feature with id api_calls not found",
+  "code": "feature_not_found"
+}
+```
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Verify Feature Configuration">
+    Check the configuration of a feature before adding it to a plan:
+    
+    ```typescript
+    const feature = await autumn.features.get('api_calls');
+    
+    if (feature.type === 'single_use' && feature.consumable) {
+      // This feature can be used for usage-based billing
+      console.log('Feature is consumable:', feature.name);
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Display Feature Information">
+    Use the feature details to show information in your UI:
+    
+    ```typescript
+    const feature = await autumn.features.get('storage_gb');
+    
+    // Use display names in your UI
+    const message = `You have used ${usage} ${feature.display.plural}`;
+    // "You have used 15 GB"
+    ```
+  </Accordion>
+  
+  <Accordion title="Check Credit Costs">
+    For credit system features, check the credit costs of different operations:
+    
+    ```typescript
+    const credits = await autumn.features.get('ai_credits');
+    
+    credits.credit_schema.forEach(item => {
+      console.log(`${item.metered_feature_id}: ${item.credit_cost} credits`);
+    });
+    // gpt4_requests: 10 credits
+    // gpt35_requests: 2 credits
+    // image_generation: 5 credits
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Update Feature" icon="pen" href="/api/features/update">
+    Modify feature properties
+  </Card>
+  <Card title="List Features" icon="list" href="/api/features/list">
+    View all features
+  </Card>
+  <Card title="Delete Feature" icon="trash" href="/api/features/delete">
+    Remove a feature
+  </Card>
+  <Card title="Feature Concepts" icon="book" href="/concepts/features">
+    Learn more about feature types
+  </Card>
+</CardGroup>

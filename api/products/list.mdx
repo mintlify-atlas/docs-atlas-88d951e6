@@ -1,0 +1,494 @@
+---
+title: 'List Products'
+description: 'Retrieve all products with their configurations and metadata'
+---
+
+## Overview
+
+Retrieve a list of all products in your environment. This endpoint returns all product configurations including active, archived, and default products with their complete item structures.
+
+<CodeGroup>
+```bash cURL
+curl https://api.useautumn.com/products \
+  -H "Authorization: Bearer YOUR_SECRET_KEY"
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'YOUR_SECRET_KEY'
+});
+
+const { list } = await autumn.products.list();
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'YOUR_SECRET_KEY'
+});
+
+const { list } = await autumn.products.list();
+```
+</CodeGroup>
+
+## Response
+
+<ResponseField name="list" type="array">
+  Array of product objects. Each product contains complete configuration details.
+  
+  <Expandable title="Product Object Properties">
+    <ResponseField name="id" type="string">
+      The unique identifier of the product.
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      The display name of the product.
+    </ResponseField>
+    
+    <ResponseField name="description" type="string">
+      The product description.
+    </ResponseField>
+    
+    <ResponseField name="group" type="string">
+      The product group identifier. Products in the same group follow upgrade/downgrade logic.
+    </ResponseField>
+    
+    <ResponseField name="env" type="string">
+      The environment: `sandbox` or `production`
+    </ResponseField>
+    
+    <ResponseField name="is_add_on" type="boolean">
+      Whether the product is an add-on.
+    </ResponseField>
+    
+    <ResponseField name="is_default" type="boolean">
+      Whether this is the default product for new customers.
+    </ResponseField>
+    
+    <ResponseField name="archived" type="boolean">
+      Whether the product has been archived.
+    </ResponseField>
+    
+    <ResponseField name="version" type="number">
+      The current version number of the product.
+    </ResponseField>
+    
+    <ResponseField name="created_at" type="number">
+      The timestamp when the product was created (milliseconds since epoch).
+    </ResponseField>
+    
+    <ResponseField name="items" type="array">
+      Array of product items defining features and pricing.
+      
+      <Expandable title="Product Item Properties">
+        <ResponseField name="type" type="string">
+          The item type: `price`, `feature`, or `priced_feature`
+        </ResponseField>
+        
+        <ResponseField name="feature_id" type="string">
+          The feature identifier, or null for base prices.
+        </ResponseField>
+        
+        <ResponseField name="included_usage" type="number">
+          The included usage amount per interval.
+        </ResponseField>
+        
+        <ResponseField name="interval" type="string">
+          The billing or reset interval.
+        </ResponseField>
+        
+        <ResponseField name="interval_count" type="number">
+          The number of intervals.
+        </ResponseField>
+        
+        <ResponseField name="price" type="number">
+          The price per unit or billing amount.
+        </ResponseField>
+        
+        <ResponseField name="usage_model" type="string">
+          The billing model: `prepaid` or `pay_per_use`
+        </ResponseField>
+        
+        <ResponseField name="billing_units" type="number">
+          The billing units for usage-based pricing.
+        </ResponseField>
+        
+        <ResponseField name="display" type="object">
+          Display information for user interfaces.
+          
+          <ResponseField name="primary_text" type="string">
+            The main display text.
+          </ResponseField>
+          
+          <ResponseField name="secondary_text" type="string">
+            Additional context text.
+          </ResponseField>
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="free_trial" type="object">
+      Free trial configuration, if available.
+      
+      <ResponseField name="duration" type="string">
+        Duration type: `day`, `month`, or `year`
+      </ResponseField>
+      
+      <ResponseField name="length" type="number">
+        Trial length in duration units.
+      </ResponseField>
+      
+      <ResponseField name="card_required" type="boolean">
+        Whether a payment method is required.
+      </ResponseField>
+      
+      <ResponseField name="unique_fingerprint" type="boolean">
+        Whether trials are limited per fingerprint.
+      </ResponseField>
+    </ResponseField>
+    
+    <ResponseField name="base_variant_id" type="string">
+      ID of the base variant, if any.
+    </ResponseField>
+    
+    <ResponseField name="scenario" type="string">
+      The attach scenario for this product.
+    </ResponseField>
+    
+    <ResponseField name="properties" type="object">
+      Computed properties about the product.
+      
+      <ResponseField name="is_free" type="boolean">
+        True if the product has no pricing.
+      </ResponseField>
+      
+      <ResponseField name="is_one_off" type="boolean">
+        True if the product only has one-time pricing.
+      </ResponseField>
+      
+      <ResponseField name="interval_group" type="string">
+        The primary billing interval.
+      </ResponseField>
+      
+      <ResponseField name="has_trial" type="boolean">
+        True if the product has a free trial.
+      </ResponseField>
+      
+      <ResponseField name="updateable" type="boolean">
+        True if the product can be updated.
+      </ResponseField>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Response Example
+
+```json
+{
+  "list": [
+    {
+      "id": "free-tier",
+      "name": "Free Plan",
+      "description": "Get started with basic features",
+      "group": "main-plans",
+      "env": "production",
+      "is_add_on": false,
+      "is_default": true,
+      "archived": false,
+      "version": 1,
+      "created_at": 1708298400000,
+      "items": [
+        {
+          "type": "feature",
+          "feature_id": "api-calls",
+          "included_usage": 1000,
+          "interval": "month",
+          "interval_count": 1,
+          "display": {
+            "primary_text": "1,000 API Calls",
+            "secondary_text": "per month"
+          }
+        }
+      ],
+      "free_trial": null,
+      "base_variant_id": null,
+      "scenario": "new",
+      "properties": {
+        "is_free": true,
+        "is_one_off": false,
+        "interval_group": "month",
+        "has_trial": false,
+        "updateable": false
+      }
+    },
+    {
+      "id": "pro-plan",
+      "name": "Pro Plan",
+      "description": "Professional features for growing teams",
+      "group": "main-plans",
+      "env": "production",
+      "is_add_on": false,
+      "is_default": false,
+      "archived": false,
+      "version": 2,
+      "created_at": 1708298400000,
+      "items": [
+        {
+          "type": "price",
+          "feature_id": null,
+          "interval": "month",
+          "interval_count": 1,
+          "price": 29,
+          "display": {
+            "primary_text": "$29",
+            "secondary_text": "per month"
+          }
+        },
+        {
+          "type": "priced_feature",
+          "feature_id": "api-calls",
+          "included_usage": 10000,
+          "interval": "month",
+          "interval_count": 1,
+          "price": 0.01,
+          "usage_model": "pay_per_use",
+          "billing_units": 1000,
+          "display": {
+            "primary_text": "10,000 API Calls",
+            "secondary_text": "then $0.01 per 1,000 calls"
+          }
+        }
+      ],
+      "free_trial": {
+        "duration": "day",
+        "length": 14,
+        "card_required": true,
+        "unique_fingerprint": false
+      },
+      "base_variant_id": null,
+      "scenario": "upgrade",
+      "properties": {
+        "is_free": false,
+        "is_one_off": false,
+        "interval_group": "month",
+        "has_trial": true,
+        "updateable": true
+      }
+    },
+    {
+      "id": "enterprise-tier",
+      "name": "Enterprise",
+      "description": "Advanced features and support",
+      "group": "main-plans",
+      "env": "production",
+      "is_add_on": false,
+      "is_default": false,
+      "archived": false,
+      "version": 1,
+      "created_at": 1708298400000,
+      "items": [
+        {
+          "type": "price",
+          "feature_id": null,
+          "interval": "year",
+          "interval_count": 1,
+          "price": 990,
+          "display": {
+            "primary_text": "$990",
+            "secondary_text": "per year"
+          }
+        },
+        {
+          "type": "feature",
+          "feature_id": "api-calls",
+          "included_usage": "infinite",
+          "display": {
+            "primary_text": "Unlimited API Calls"
+          }
+        }
+      ],
+      "free_trial": null,
+      "base_variant_id": null,
+      "scenario": "upgrade",
+      "properties": {
+        "is_free": false,
+        "is_one_off": false,
+        "interval_group": "year",
+        "has_trial": false,
+        "updateable": true
+      }
+    },
+    {
+      "id": "extra-storage",
+      "name": "Extra Storage",
+      "description": "Additional storage space",
+      "group": null,
+      "env": "production",
+      "is_add_on": true,
+      "is_default": false,
+      "archived": false,
+      "version": 1,
+      "created_at": 1708298400000,
+      "items": [
+        {
+          "type": "price",
+          "feature_id": null,
+          "interval": "month",
+          "interval_count": 1,
+          "price": 10,
+          "display": {
+            "primary_text": "$10",
+            "secondary_text": "per month"
+          }
+        },
+        {
+          "type": "feature",
+          "feature_id": "storage",
+          "included_usage": 100,
+          "interval": "month",
+          "display": {
+            "primary_text": "100 GB Storage"
+          }
+        }
+      ],
+      "free_trial": null,
+      "base_variant_id": null,
+      "scenario": "addon",
+      "properties": {
+        "is_free": false,
+        "is_one_off": false,
+        "interval_group": "month",
+        "has_trial": false,
+        "updateable": true
+      }
+    }
+  ]
+}
+```
+
+## Use Cases
+
+### Display Pricing Page
+
+Retrieve all products to build your pricing page:
+
+```javascript
+const { list: products } = await autumn.products.list();
+
+// Filter out archived products
+const activeProducts = products.filter(p => !p.archived && !p.is_add_on);
+
+// Sort by price
+activeProducts.sort((a, b) => {
+  const priceA = a.items.find(i => i.type === 'price')?.price || 0;
+  const priceB = b.items.find(i => i.type === 'price')?.price || 0;
+  return priceA - priceB;
+});
+
+// Display products
+activeProducts.forEach(product => {
+  console.log(`${product.name}: $${product.items[0].price}/${product.items[0].interval}`);
+});
+```
+
+### Filter by Product Type
+
+Get specific types of products:
+
+```javascript
+const { list: products } = await autumn.products.list();
+
+// Get add-ons only
+const addons = products.filter(p => p.is_add_on);
+
+// Get subscription plans only
+const subscriptions = products.filter(p => 
+  !p.is_add_on && 
+  !p.properties?.is_free && 
+  !p.properties?.is_one_off
+);
+
+// Get products with free trials
+const trialProducts = products.filter(p => p.free_trial !== null);
+```
+
+### Group by Interval
+
+Organize products by billing frequency:
+
+```javascript
+const { list: products } = await autumn.products.list();
+
+const byInterval = products.reduce((acc, product) => {
+  const interval = product.properties?.interval_group || 'one-time';
+  if (!acc[interval]) acc[interval] = [];
+  acc[interval].push(product);
+  return acc;
+}, {});
+
+console.log('Monthly plans:', byInterval.month?.length || 0);
+console.log('Annual plans:', byInterval.year?.length || 0);
+```
+
+### Find Default Product
+
+Get the default product for new customers:
+
+```javascript
+const { list: products } = await autumn.products.list();
+const defaultProduct = products.find(p => p.is_default);
+
+if (defaultProduct) {
+  console.log('Default product:', defaultProduct.name);
+} else {
+  console.log('No default product set');
+}
+```
+
+### Check Product Versions
+
+Find products with multiple versions:
+
+```javascript
+const { list: products } = await autumn.products.list();
+
+const productVersions = products.reduce((acc, product) => {
+  if (!acc[product.id]) {
+    acc[product.id] = [];
+  }
+  acc[product.id].push(product.version);
+  return acc;
+}, {});
+
+// Find products with multiple versions
+Object.entries(productVersions).forEach(([id, versions]) => {
+  if (versions.length > 1) {
+    console.log(`${id} has ${versions.length} versions:`, versions);
+  }
+});
+```
+
+### Build Product Comparison
+
+Create a feature comparison matrix:
+
+```javascript
+const { list: products } = await autumn.products.list();
+
+const comparison = products.map(product => ({
+  name: product.name,
+  price: product.items.find(i => i.type === 'price')?.price || 0,
+  features: product.items
+    .filter(i => i.feature_id)
+    .map(i => ({
+      id: i.feature_id,
+      included: i.included_usage,
+      unlimited: i.included_usage === 'infinite'
+    }))
+}));
+
+console.table(comparison);
+```

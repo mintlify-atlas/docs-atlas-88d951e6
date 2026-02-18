@@ -1,0 +1,387 @@
+---
+title: "List Entities"
+description: "Retrieve all entities for a customer or feature"
+---
+
+## Overview
+
+Retrieves a list of entities, optionally filtered by customer ID or feature ID. This is useful for displaying all seats, workspaces, or other resources associated with a customer.
+
+## Endpoint
+
+```
+GET /v1/entities
+```
+
+## Authentication
+
+Requires an API key in the Authorization header:
+
+```
+Authorization: Bearer your_api_key
+```
+
+## Query Parameters
+
+<ParamField query="customer_id" type="string">
+  Filter entities by customer ID. Returns all entities belonging to this customer.
+</ParamField>
+
+<ParamField query="feature_id" type="string">
+  Filter entities by feature ID. Returns all entities counting toward this feature.
+</ParamField>
+
+<ParamField query="limit" type="number" default={100}>
+  Maximum number of entities to return (1-1000)
+</ParamField>
+
+<ParamField query="offset" type="number" default={0}>
+  Number of entities to skip for pagination
+</ParamField>
+
+<ParamField query="expand" type="array">
+  Additional data to include in the response. Available options:
+  
+  - `invoices` - Include invoices for entities
+  - `subscriptions.plan` - Include full plan details
+  - `balances.feature` - Include feature details
+</ParamField>
+
+<ParamField query="include_deleted" type="boolean" default={false}>
+  Include soft-deleted entities in the results
+</ParamField>
+
+## Response
+
+<ResponseField name="list" type="array">
+  Array of entity objects
+  
+  <Expandable title="Entity properties">
+    <ResponseField name="list[].id" type="string">
+      The unique identifier of the entity
+    </ResponseField>
+    
+    <ResponseField name="list[].name" type="string">
+      The name of the entity
+    </ResponseField>
+    
+    <ResponseField name="list[].customer_id" type="string">
+      The customer ID this entity belongs to
+    </ResponseField>
+    
+    <ResponseField name="list[].feature_id" type="string">
+      The feature ID this entity counts toward
+    </ResponseField>
+    
+    <ResponseField name="list[].created_at" type="number">
+      Unix timestamp when the entity was created
+    </ResponseField>
+    
+    <ResponseField name="list[].env" type="string">
+      Environment: "sandbox" or "live"
+    </ResponseField>
+    
+    <ResponseField name="list[].subscriptions" type="array">
+      Associated subscriptions
+    </ResponseField>
+    
+    <ResponseField name="list[].balances" type="object">
+      Feature balances
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="total" type="number">
+  Total number of entities matching the filters
+</ResponseField>
+
+<ResponseField name="has_more" type="boolean">
+  Whether there are more entities beyond this page
+</ResponseField>
+
+<ResponseField name="offset" type="number">
+  The offset used for this request
+</ResponseField>
+
+<ResponseField name="limit" type="number">
+  The limit used for this request
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash curl (by customer)
+curl -X GET "https://api.useautumn.com/v1/entities?customer_id=team_123" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```bash curl (by feature)
+curl -X GET "https://api.useautumn.com/v1/entities?feature_id=team_seats" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```bash curl (with pagination)
+curl -X GET "https://api.useautumn.com/v1/entities?customer_id=team_123&limit=50&offset=0" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'sk_test_...'
+});
+
+// List all entities for a customer
+const result = await autumn.entities.list({
+  customerId: 'team_123'
+});
+
+console.log(`Total entities: ${result.total}`);
+console.log(result.list);
+```
+
+```javascript JavaScript SDK (with filters)
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'sk_test_...'
+});
+
+// List team seats for a customer
+const result = await autumn.entities.list({
+  customerId: 'team_123',
+  featureId: 'team_seats'
+});
+
+console.log(`Active seats: ${result.total}`);
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: process.env.AUTUMN_SECRET_KEY!
+});
+
+const result = await autumn.entities.list({
+  customerId: 'team_123',
+  limit: 100,
+  offset: 0
+});
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'https://api.useautumn.com/v1/entities',
+    headers={
+        'Authorization': 'Bearer sk_test_...',
+    },
+    params={
+        'customer_id': 'team_123',
+        'feature_id': 'team_seats'
+    }
+)
+
+data = response.json()
+print(f"Total entities: {data['total']}")
+```
+
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "list": [
+    {
+      "id": "user_456",
+      "name": "Alice Johnson",
+      "customer_id": "team_123",
+      "feature_id": "team_seats",
+      "created_at": 1709251200,
+      "env": "live",
+      "subscriptions": [],
+      "scheduled_subscriptions": [],
+      "balances": {}
+    },
+    {
+      "id": "user_789",
+      "name": "Bob Smith",
+      "customer_id": "team_123",
+      "feature_id": "team_seats",
+      "created_at": 1709337600,
+      "env": "live",
+      "subscriptions": [],
+      "scheduled_subscriptions": [],
+      "balances": {}
+    }
+  ],
+  "total": 2,
+  "has_more": false,
+  "offset": 0,
+  "limit": 100
+}
+```
+
+## Use Cases
+
+### Display Team Members
+
+```javascript
+// Show all team members (seats) in your UI
+async function getTeamMembers(teamId) {
+  const result = await autumn.entities.list({
+    customerId: teamId,
+    featureId: 'team_seats'
+  });
+  
+  return result.list.map(entity => ({
+    id: entity.id,
+    name: entity.name,
+    joinedAt: new Date(entity.created_at * 1000)
+  }));
+}
+```
+
+### Count Active Resources
+
+```javascript
+// Count active workspaces for a customer
+async function countWorkspaces(customerId) {
+  const result = await autumn.entities.list({
+    customerId,
+    featureId: 'workspaces',
+    limit: 1 // We only need the count
+  });
+  
+  return result.total;
+}
+```
+
+### Paginated Entity List
+
+```javascript
+// Fetch entities with pagination
+async function getEntitiesPage(customerId, page = 0, pageSize = 50) {
+  const result = await autumn.entities.list({
+    customerId,
+    limit: pageSize,
+    offset: page * pageSize
+  });
+  
+  return {
+    entities: result.list,
+    totalPages: Math.ceil(result.total / pageSize),
+    currentPage: page,
+    hasMore: result.has_more
+  };
+}
+```
+
+### Sync Check
+
+```javascript
+// Compare entities with your database
+async function checkEntitySync(customerId) {
+  const autumnEntities = await autumn.entities.list({ customerId });
+  const dbUsers = await db.users.findByCustomerId(customerId);
+  
+  const autumnIds = new Set(autumnEntities.list.map(e => e.id));
+  const dbIds = new Set(dbUsers.map(u => u.id));
+  
+  const missingInAutumn = dbUsers.filter(u => !autumnIds.has(u.id));
+  const missingInDb = autumnEntities.list.filter(e => !dbIds.has(e.id));
+  
+  return {
+    inSync: missingInAutumn.length === 0 && missingInDb.length === 0,
+    missingInAutumn,
+    missingInDb
+  };
+}
+```
+
+### Batch Operations
+
+```javascript
+// Delete all entities for a feature
+async function removeAllSeats(customerId) {
+  const result = await autumn.entities.list({
+    customerId,
+    featureId: 'team_seats'
+  });
+  
+  for (const entity of result.list) {
+    await autumn.entities.delete(entity.id);
+  }
+  
+  return result.total;
+}
+```
+
+## Pagination
+
+For large entity lists, use pagination to fetch results in batches:
+
+```javascript
+async function getAllEntities(customerId) {
+  const allEntities = [];
+  let offset = 0;
+  const limit = 100;
+  let hasMore = true;
+  
+  while (hasMore) {
+    const result = await autumn.entities.list({
+      customerId,
+      limit,
+      offset
+    });
+    
+    allEntities.push(...result.list);
+    hasMore = result.has_more;
+    offset += limit;
+  }
+  
+  return allEntities;
+}
+```
+
+## Best Practices
+
+<Tip>
+  **Filter by both customer and feature**: When listing entities, filter by both `customer_id` and `feature_id` for more precise results.
+</Tip>
+
+<Tip>
+  **Use pagination**: For customers with many entities, use the `limit` and `offset` parameters to paginate results efficiently.
+</Tip>
+
+<Info>
+  By default, soft-deleted entities are excluded from results. Set `include_deleted=true` to include them for auditing purposes.
+</Info>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Create Entity" icon="plus" href="/api/entities/create">
+    Create a new entity
+  </Card>
+  <Card title="Get Entity" icon="eye" href="/api/entities/get">
+    Get a specific entity
+  </Card>
+  <Card title="Delete Entity" icon="trash" href="/api/entities/delete">
+    Delete an entity
+  </Card>
+  <Card title="Check Access" icon="shield-check" href="/api/check">
+    Check entity limits
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Entities Concept Guide](/concepts/entities)
+- [Seat-based Pricing Guide](/guides/seat-based-pricing)
+- [Customers API](/api/customers/list)

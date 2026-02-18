@@ -1,0 +1,578 @@
+---
+title: "Check"
+description: "Check customer access to features and retrieve balance information"
+api: "POST https://api.useautumn.com/v1/check"
+---
+
+## Overview
+
+The `/check` endpoint verifies whether a customer has access to a specific feature and returns their current balance and usage information. This is essential for implementing:
+- Feature gating and access control
+- Usage limit validation
+- Paywall and upgrade prompts
+- Pre-authorization checks before expensive operations
+
+Use this endpoint before allowing customers to use premium features or consume resources.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token with your Autumn API key. Use your public key for client-side requests and secret key for server-side requests.
+</ParamField>
+
+## Request Body
+
+<ParamField body="customer_id" type="string" required>
+  ID which you provided when creating the customer. This uniquely identifies the customer in your system.
+</ParamField>
+
+<ParamField body="feature_id" type="string">
+  ID of the feature to check access to. Required if `product_id` is not provided. Use this for checking individual features.
+</ParamField>
+
+<ParamField body="product_id" type="string">
+  ID of the product to check access to. Required if `feature_id` is not provided. Use this to check if a customer has a specific product.
+</ParamField>
+
+<ParamField body="required_balance" type="number">
+  If you know the amount of the feature the end user is consuming in advance, specify it here. If their balance is below this quantity, `allowed` will be `false`. This is useful for pre-validation before expensive operations.
+</ParamField>
+
+<ParamField body="send_event" type="boolean" default={false}>
+  If `true`, a usage event will be recorded together with checking access. The `required_balance` field will be used as the usage value. This allows you to check and track in a single request.
+</ParamField>
+
+<ParamField body="with_preview" type="boolean" default={false}>
+  If `true`, the response will include a `preview` object with paywall information. Use this to display upgrade prompts or paywall UI when access is denied.
+</ParamField>
+
+<ParamField body="entity_id" type="string">
+  If using entity balances (e.g., seats or teams), the entity ID to check access for. This checks the balance for a specific entity within the customer's account.
+</ParamField>
+
+<ParamField body="customer_data" type="object">
+  Properties used if customer is automatically created. Will also update the customer if name or email is not already set.
+
+  <Expandable title="customer_data properties">
+    <ParamField body="customer_data.name" type="string">
+      Customer's full name
+    </ParamField>
+    <ParamField body="customer_data.email" type="string">
+      Customer's email address (must be valid email format)
+    </ParamField>
+    <ParamField body="customer_data.metadata" type="object">
+      Additional custom metadata to store with the customer
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="skip_cache" type="boolean" default={false}>
+  Skip cached balance data and fetch fresh data from the database. Use this when you need real-time accuracy.
+</ParamField>
+
+<ParamField query="expand" type="string[]">
+  Expand related objects in the response. Available values:
+  - `balance.feature` - Include full feature details in the balance object
+</ParamField>
+
+## Response
+
+<ResponseField name="allowed" type="boolean" required>
+  Whether the customer has access to the feature. `true` means they can proceed, `false` means they should be blocked or prompted to upgrade.
+</ResponseField>
+
+<ResponseField name="customer_id" type="string" required>
+  The ID of the customer that was checked
+</ResponseField>
+
+<ResponseField name="entity_id" type="string | null">
+  The entity ID if the check was for a specific entity
+</ResponseField>
+
+<ResponseField name="required_balance" type="number">
+  The balance amount that was required for this check (if provided in request)
+</ResponseField>
+
+<ResponseField name="balance" type="object | null" required>
+  Balance information for the feature. Will be `null` if the customer has no balance for this feature.
+
+  <Expandable title="balance properties">
+    <ResponseField name="balance.feature_id" type="string" required>
+      The feature ID this balance is for
+    </ResponseField>
+
+    <ResponseField name="balance.unlimited" type="boolean" required>
+      Whether this feature has unlimited access
+    </ResponseField>
+
+    <ResponseField name="balance.granted_balance" type="number" required>
+      The base balance granted by the customer's plan
+    </ResponseField>
+
+    <ResponseField name="balance.purchased_balance" type="number" required>
+      Additional balance purchased beyond the base plan
+    </ResponseField>
+
+    <ResponseField name="balance.current_balance" type="number" required>
+      The current remaining balance available to use
+    </ResponseField>
+
+    <ResponseField name="balance.usage" type="number" required>
+      Total usage consumed in the current billing period
+    </ResponseField>
+
+    <ResponseField name="balance.overage_allowed" type="boolean" required>
+      Whether usage beyond the balance is allowed
+    </ResponseField>
+
+    <ResponseField name="balance.max_purchase" type="number | null" required>
+      Maximum additional balance that can be purchased (null if unlimited)
+    </ResponseField>
+
+    <ResponseField name="balance.reset" type="object | null" required>
+      Information about when the balance resets
+
+      <Expandable title="reset properties">
+        <ResponseField name="balance.reset.interval" type="string" required>
+          Reset interval (e.g., "month", "year", "week", "day", "multiple")
+        </ResponseField>
+
+        <ResponseField name="balance.reset.interval_count" type="number">
+          Number of intervals (used with "multiple" interval type)
+        </ResponseField>
+
+        <ResponseField name="balance.reset.resets_at" type="number | null" required>
+          Unix timestamp (milliseconds) of next reset, or null if no reset scheduled
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="balance.plan_id" type="string | null" required>
+      The plan ID that granted this balance
+    </ResponseField>
+
+    <ResponseField name="balance.feature" type="object">
+      Full feature details (only included if `expand=balance.feature` query parameter is used)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="preview" type="object">
+  Paywall preview information (only included if `with_preview: true`). Use this to display upgrade prompts.
+
+  <Expandable title="preview properties">
+    <ResponseField name="preview.scenario" type="string" required>
+      Type of preview: "usage_limit" or "feature_flag"
+    </ResponseField>
+
+    <ResponseField name="preview.title" type="string" required>
+      Title for the paywall or upgrade prompt
+    </ResponseField>
+
+    <ResponseField name="preview.message" type="string" required>
+      Description message for the paywall
+    </ResponseField>
+
+    <ResponseField name="preview.feature_id" type="string" required>
+      The feature ID being checked
+    </ResponseField>
+
+    <ResponseField name="preview.feature_name" type="string" required>
+      Human-readable feature name
+    </ResponseField>
+
+    <ResponseField name="preview.products" type="array" required>
+      Array of products that provide access to this feature. Use these to show upgrade options.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Basic feature access check
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.useautumn.com/v1/check \
+  -H "Authorization: Bearer am_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "user_123",
+    "feature_id": "ai_tokens"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.useautumn.com/v1/check', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer am_sk_...',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    customer_id: 'user_123',
+    feature_id: 'ai_tokens',
+  }),
+});
+
+const data = await response.json();
+console.log(data);
+// {
+//   "allowed": true,
+//   "customer_id": "user_123",
+//   "entity_id": null,
+//   "balance": {
+//     "feature_id": "ai_tokens",
+//     "unlimited": false,
+//     "granted_balance": 10000,
+//     "purchased_balance": 0,
+//     "current_balance": 7500,
+//     "usage": 2500,
+//     "overage_allowed": false,
+//     "max_purchase": 50000,
+//     "reset": {
+//       "interval": "month",
+//       "resets_at": 1709251200000
+//     },
+//     "plan_id": "pro_plan"
+//   }
+// }
+
+if (data.allowed) {
+  // Customer can use the feature
+} else {
+  // Show upgrade prompt
+}
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.useautumn.com/v1/check',
+    headers={
+        'Authorization': 'Bearer am_sk_...',
+        'Content-Type': 'application/json',
+    },
+    json={
+        'customer_id': 'user_123',
+        'feature_id': 'ai_tokens',
+    }
+)
+
+data = response.json()
+if data['allowed']:
+    # Customer can use the feature
+    pass
+else:
+    # Show upgrade prompt
+    pass
+```
+
+</CodeGroup>
+
+### Check with required balance
+
+Pre-validate that a customer has enough balance before an expensive operation:
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.useautumn.com/v1/check \
+  -H "Authorization: Bearer am_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "user_123",
+    "feature_id": "ai_tokens",
+    "required_balance": 1000
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.useautumn.com/v1/check', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer am_sk_...',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    customer_id: 'user_123',
+    feature_id: 'ai_tokens',
+    required_balance: 1000,
+  }),
+});
+
+const data = await response.json();
+
+if (!data.allowed) {
+  console.log('Insufficient tokens. Customer needs to upgrade.');
+  // Current balance: data.balance.current_balance
+  // Required: data.required_balance
+}
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.useautumn.com/v1/check',
+    headers={
+        'Authorization': 'Bearer am_sk_...',
+        'Content-Type': 'application/json',
+    },
+    json={
+        'customer_id': 'user_123',
+        'feature_id': 'ai_tokens',
+        'required_balance': 1000,
+    }
+)
+
+data = response.json()
+if not data['allowed']:
+    print(f"Insufficient tokens. Need {data['required_balance']}, have {data['balance']['current_balance']}")
+```
+
+</CodeGroup>
+
+### Check with preview for paywall
+
+Get paywall information to display upgrade prompts:
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.useautumn.com/v1/check \
+  -H "Authorization: Bearer am_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "user_123",
+    "feature_id": "advanced_analytics",
+    "with_preview": true
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.useautumn.com/v1/check', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer am_sk_...',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    customer_id: 'user_123',
+    feature_id: 'advanced_analytics',
+    with_preview: true,
+  }),
+});
+
+const data = await response.json();
+
+if (!data.allowed && data.preview) {
+  // Display paywall with upgrade options
+  console.log(data.preview.title); // "Upgrade to access Advanced Analytics"
+  console.log(data.preview.message); // "This feature is available on Pro and Enterprise plans"
+  console.log(data.preview.products); // Array of products to offer
+  
+  // Show upgrade modal with products
+  showUpgradeModal({
+    title: data.preview.title,
+    message: data.preview.message,
+    products: data.preview.products,
+  });
+}
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.useautumn.com/v1/check',
+    headers={
+        'Authorization': 'Bearer am_sk_...',
+        'Content-Type': 'application/json',
+    },
+    json={
+        'customer_id': 'user_123',
+        'feature_id': 'advanced_analytics',
+        'with_preview': True,
+    }
+)
+
+data = response.json()
+if not data['allowed'] and 'preview' in data:
+    # Display paywall
+    print(data['preview']['title'])
+    print(data['preview']['message'])
+    for product in data['preview']['products']:
+        print(f"Upgrade to {product['name']}")
+```
+
+</CodeGroup>
+
+### Check entity balance (seats)
+
+Check balance for a specific entity like a team or workspace:
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.useautumn.com/v1/check \
+  -H "Authorization: Bearer am_sk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "org_456",
+    "feature_id": "seats",
+    "entity_id": "team_789",
+    "required_balance": 1
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.useautumn.com/v1/check', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer am_sk_...',
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    customer_id: 'org_456',
+    feature_id: 'seats',
+    entity_id: 'team_789',
+    required_balance: 1,
+  }),
+});
+
+const data = await response.json();
+
+if (!data.allowed) {
+  console.log('Team has reached maximum seats. Please upgrade.');
+}
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.useautumn.com/v1/check',
+    headers={
+        'Authorization': 'Bearer am_sk_...',
+        'Content-Type': 'application/json',
+    },
+    json={
+        'customer_id': 'org_456',
+        'feature_id': 'seats',
+        'entity_id': 'team_789',
+        'required_balance': 1,
+    }
+)
+
+data = response.json()
+```
+
+</CodeGroup>
+
+## Use Cases
+
+### Pre-flight validation
+
+Before expensive AI operations, check if the customer has enough credits:
+
+```javascript
+async function generateAI(prompt) {
+  const checkResult = await autumn.check({
+    customer_id: 'user_123',
+    feature_id: 'ai_tokens',
+    required_balance: 1000, // This generation will use 1000 tokens
+  });
+
+  if (!checkResult.allowed) {
+    throw new Error('Insufficient AI tokens');
+  }
+
+  // Proceed with generation
+  const result = await runAI(prompt);
+  
+  // Track the actual usage
+  await autumn.track({
+    customer_id: 'user_123',
+    feature_id: 'ai_tokens',
+    value: 1000,
+  });
+
+  return result;
+}
+```
+
+### Feature gating
+
+Gate premium features based on customer's plan:
+
+```javascript
+async function accessPremiumFeature() {
+  const checkResult = await autumn.check({
+    customer_id: 'user_123',
+    feature_id: 'advanced_analytics',
+    with_preview: true,
+  });
+
+  if (!checkResult.allowed) {
+    // Show paywall with upgrade options
+    return {
+      error: 'feature_locked',
+      upgrade_options: checkResult.preview?.products,
+    };
+  }
+
+  // Customer has access, proceed
+  return await loadAdvancedAnalytics();
+}
+```
+
+### Usage limit warnings
+
+Show warnings when customers are approaching their limits:
+
+```javascript
+const checkResult = await autumn.check({
+  customer_id: 'user_123',
+  feature_id: 'api_calls',
+});
+
+if (checkResult.balance) {
+  const { current_balance, granted_balance } = checkResult.balance;
+  const percentUsed = ((granted_balance - current_balance) / granted_balance) * 100;
+
+  if (percentUsed > 80) {
+    showWarning(`You've used ${percentUsed.toFixed(0)}% of your API calls this month.`);
+  }
+}
+```
+
+## Error Handling
+
+<ResponseField name="error" type="object">
+  Error object returned when the request fails
+
+  <Expandable title="error properties">
+    <ResponseField name="error.code" type="string">
+      Error code (e.g., "feature_not_found", "customer_not_found")
+    </ResponseField>
+    <ResponseField name="error.message" type="string">
+      Human-readable error message
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+Common error codes:
+- `feature_not_found`: Feature ID doesn't exist
+- `customer_not_found`: Customer doesn't exist
+- `validation_error`: Invalid request parameters
+
+## Related Endpoints
+
+- [Track](/api/track) - Record usage after checking access
+- [Attach](/api/attach) - Upgrade customer when access is denied
+- [Events List](/api/events/list) - View usage history

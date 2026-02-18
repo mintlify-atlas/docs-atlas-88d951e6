@@ -1,0 +1,522 @@
+---
+title: "Aggregate Events"
+description: "Get aggregated event data with time-based grouping"
+---
+
+## Overview
+
+Retrieves aggregated usage event data grouped by time periods. This is useful for generating usage charts, analytics dashboards, and billing summaries.
+
+## Endpoint
+
+```
+GET /v1/events/aggregate
+```
+
+## Authentication
+
+Requires an API key in the Authorization header:
+
+```
+Authorization: Bearer your_api_key
+```
+
+## Query Parameters
+
+<ParamField query="customer_id" type="string" required>
+  The customer ID to aggregate events for
+</ParamField>
+
+<ParamField query="feature_id" type="string | array" required>
+  Feature ID(s) to aggregate events for. Can be a single ID or an array of IDs.
+</ParamField>
+
+<ParamField query="range" type="enum">
+  Predefined time range to aggregate over. Options:
+  
+  - `24h` - Last 24 hours
+  - `7d` - Last 7 days
+  - `30d` - Last 30 days
+  - `90d` - Last 90 days
+  - `last_cycle` - Current billing cycle
+  - `1bc` - Last 1 billing cycle (default)
+  - `3bc` - Last 3 billing cycles
+  
+  **Note**: Either `range` or `custom_range` must be provided, but not both.
+</ParamField>
+
+<ParamField query="custom_range" type="object">
+  Custom time range using Unix timestamps (in milliseconds).
+  
+  <Expandable title="custom_range properties">
+    <ParamField query="custom_range.start" type="number" required>
+      Start timestamp in epoch milliseconds
+    </ParamField>
+    
+    <ParamField query="custom_range.end" type="number" required>
+      End timestamp in epoch milliseconds (must be after start)
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField query="bin_size" type="enum">
+  Size of time bins for aggregation. Options:
+  
+  - `hour` - Aggregate by hour
+  - `day` - Aggregate by day (default)
+  - `month` - Aggregate by month
+  
+  **Default behavior**: Automatically set to `hour` if `range=24h`, otherwise `day`.
+</ParamField>
+
+<ParamField query="group_by" type="string">
+  Property to group events by. Must start with `properties.` (e.g., `properties.region`, `properties.api_key`).
+  
+  When provided, each time bin will contain an object with distinct group values as keys instead of a single number.
+</ParamField>
+
+## Response
+
+### Without `group_by`
+
+When `group_by` is not specified, each feature has a single aggregated value per time period:
+
+<ResponseField name="list" type="array">
+  Array of time period objects
+  
+  <Expandable title="Period properties">
+    <ResponseField name="list[].period" type="number">
+      Unix timestamp (milliseconds) marking the start of this time bin
+    </ResponseField>
+    
+    <ResponseField name="list[].[feature_id]" type="number">
+      Aggregated value for this feature in this time period. One field per feature ID.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="total" type="object">
+  Total aggregated data across all periods
+  
+  <Expandable title="Total properties">
+    <ResponseField name="total[feature_id].count" type="number">
+      Number of time periods with data
+    </ResponseField>
+    
+    <ResponseField name="total[feature_id].sum" type="number">
+      Sum of all values across all periods
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### With `group_by`
+
+When `group_by` is specified, each feature contains an object with group values:
+
+<ResponseField name="list" type="array">
+  Array of time period objects
+  
+  <Expandable title="Period properties">
+    <ResponseField name="list[].period" type="number">
+      Unix timestamp (milliseconds) marking the start of this time bin
+    </ResponseField>
+    
+    <ResponseField name="list[].[feature_id]" type="object">
+      Object mapping group values to aggregated counts. Keys are the distinct values from the grouped property.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="total" type="object">
+  Total aggregated data across all periods (same structure as without grouping)
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash curl (last 7 days)
+curl -X GET "https://api.useautumn.com/v1/events/aggregate?customer_id=user_123&feature_id=api_calls&range=7d" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```bash curl (custom range)
+curl -X GET "https://api.useautumn.com/v1/events/aggregate?customer_id=user_123&feature_id=api_calls&custom_range[start]=1709251200000&custom_range[end]=1711843200000&bin_size=day" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```bash curl (multiple features)
+curl -X GET "https://api.useautumn.com/v1/events/aggregate?customer_id=user_123&feature_id=api_calls&feature_id=credits&range=30d" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```bash curl (with grouping)
+curl -X GET "https://api.useautumn.com/v1/events/aggregate?customer_id=user_123&feature_id=api_calls&range=7d&group_by=properties.region" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'sk_test_...'
+});
+
+// Get daily aggregation for last 30 days
+const result = await autumn.events.aggregate({
+  customerId: 'user_123',
+  featureId: 'api_calls',
+  range: '30d',
+  binSize: 'day'
+});
+
+console.log(result.total.api_calls.sum); // Total calls
+console.log(result.list); // Daily breakdown
+```
+
+```javascript JavaScript SDK (hourly data)
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'sk_test_...'
+});
+
+// Get hourly data for last 24 hours
+const result = await autumn.events.aggregate({
+  customerId: 'user_123',
+  featureId: 'api_calls',
+  range: '24h',
+  binSize: 'hour'
+});
+
+// Chart data
+const chartData = result.list.map(item => ({
+  time: new Date(item.period),
+  calls: item.api_calls
+}));
+```
+
+```javascript JavaScript SDK (with grouping)
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'sk_test_...'
+});
+
+// Group by region
+const result = await autumn.events.aggregate({
+  customerId: 'user_123',
+  featureId: 'api_calls',
+  range: '7d',
+  groupBy: 'properties.region'
+});
+
+// result.list[0].api_calls = { "us-east": 1000, "eu-west": 500 }
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: process.env.AUTUMN_SECRET_KEY!
+});
+
+const result = await autumn.events.aggregate({
+  customerId: 'user_123',
+  featureId: ['api_calls', 'credits'],
+  range: '30d'
+});
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'https://api.useautumn.com/v1/events/aggregate',
+    headers={
+        'Authorization': 'Bearer sk_test_...',
+    },
+    params={
+        'customer_id': 'user_123',
+        'feature_id': 'api_calls',
+        'range': '30d',
+        'bin_size': 'day'
+    }
+)
+
+data = response.json()
+print(f"Total usage: {data['total']['api_calls']['sum']}")
+```
+
+</CodeGroup>
+
+## Response Examples
+
+### Without Grouping
+
+```json
+{
+  "list": [
+    {
+      "period": 1762905600000,
+      "messages": 10,
+      "seats": 3
+    },
+    {
+      "period": 1762992000000,
+      "messages": 3,
+      "seats": 12
+    }
+  ],
+  "total": {
+    "messages": {
+      "count": 2,
+      "sum": 13
+    },
+    "seats": {
+      "count": 2,
+      "sum": 15
+    }
+  }
+}
+```
+
+### With Grouping
+
+```json
+{
+  "list": [
+    {
+      "period": 1762905600000,
+      "api_calls": {
+        "us-east-1": 1200,
+        "eu-west-1": 800
+      }
+    },
+    {
+      "period": 1762992000000,
+      "api_calls": {
+        "us-east-1": 1500,
+        "eu-west-1": 600,
+        "ap-south-1": 200
+      }
+    }
+  ],
+  "total": {
+    "api_calls": {
+      "count": 2,
+      "sum": 4300
+    }
+  }
+}
+```
+
+## Use Cases
+
+### Usage Chart
+
+```javascript
+// Generate data for a usage chart
+async function getUsageChartData(customerId, featureId, days = 30) {
+  const result = await autumn.events.aggregate({
+    customerId,
+    featureId,
+    range: `${days}d`,
+    binSize: 'day'
+  });
+  
+  return result.list.map(item => ({
+    date: new Date(item.period).toLocaleDateString(),
+    usage: item[featureId] || 0
+  }));
+}
+```
+
+### Real-time Monitoring
+
+```javascript
+// Get hourly usage for last 24 hours
+async function getRealtimeUsage(customerId, featureId) {
+  const result = await autumn.events.aggregate({
+    customerId,
+    featureId,
+    range: '24h',
+    binSize: 'hour'
+  });
+  
+  return {
+    current: result.list[result.list.length - 1]?.[featureId] || 0,
+    total24h: result.total[featureId].sum,
+    hourly: result.list
+  };
+}
+```
+
+### Regional Breakdown
+
+```javascript
+// Analyze usage by region
+async function getUsageByRegion(customerId, featureId) {
+  const result = await autumn.events.aggregate({
+    customerId,
+    featureId,
+    range: '7d',
+    groupBy: 'properties.region'
+  });
+  
+  // Aggregate by region across all periods
+  const byRegion = {};
+  result.list.forEach(period => {
+    const regionData = period[featureId] || {};
+    Object.entries(regionData).forEach(([region, count]) => {
+      byRegion[region] = (byRegion[region] || 0) + count;
+    });
+  });
+  
+  return byRegion;
+}
+```
+
+### Billing Period Summary
+
+```javascript
+// Get usage for current billing cycle
+async function getBillingPeriodUsage(customerId) {
+  const result = await autumn.events.aggregate({
+    customerId,
+    featureId: ['api_calls', 'storage', 'bandwidth'],
+    range: '1bc' // Current billing cycle
+  });
+  
+  return {
+    apiCalls: result.total.api_calls?.sum || 0,
+    storage: result.total.storage?.sum || 0,
+    bandwidth: result.total.bandwidth?.sum || 0,
+    dailyBreakdown: result.list
+  };
+}
+```
+
+### Compare Periods
+
+```javascript
+// Compare usage between two periods
+async function compareUsage(customerId, featureId) {
+  const now = Date.now();
+  const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
+  const sixtyDaysAgo = now - (60 * 24 * 60 * 60 * 1000);
+  
+  const [current, previous] = await Promise.all([
+    autumn.events.aggregate({
+      customerId,
+      featureId,
+      customRange: { start: thirtyDaysAgo, end: now }
+    }),
+    autumn.events.aggregate({
+      customerId,
+      featureId,
+      customRange: { start: sixtyDaysAgo, end: thirtyDaysAgo }
+    })
+  ]);
+  
+  const currentTotal = current.total[featureId].sum;
+  const previousTotal = previous.total[featureId].sum;
+  const change = ((currentTotal - previousTotal) / previousTotal) * 100;
+  
+  return {
+    current: currentTotal,
+    previous: previousTotal,
+    changePercent: change.toFixed(2)
+  };
+}
+```
+
+## Time Bins
+
+The `bin_size` parameter determines how data is grouped:
+
+- **Hour**: Best for 24-hour views and real-time monitoring
+- **Day**: Best for weekly/monthly views and trends
+- **Month**: Best for yearly views and long-term analysis
+
+```javascript
+// Automatic bin size selection
+// range: '24h' → binSize: 'hour' (default)
+// range: '7d' → binSize: 'day' (default)
+// range: '90d' → binSize: 'day' (default)
+```
+
+## Grouping
+
+Use `group_by` to segment data by custom properties:
+
+```javascript
+// Track events with properties
+await autumn.track({
+  customerId: 'user_123',
+  featureId: 'api_calls',
+  value: 1,
+  properties: {
+    region: 'us-east-1',
+    method: 'POST',
+    endpoint: '/api/users'
+  }
+});
+
+// Aggregate by region
+const byRegion = await autumn.events.aggregate({
+  customerId: 'user_123',
+  featureId: 'api_calls',
+  range: '7d',
+  groupBy: 'properties.region'
+});
+
+// Aggregate by endpoint
+const byEndpoint = await autumn.events.aggregate({
+  customerId: 'user_123',
+  featureId: 'api_calls',
+  range: '7d',
+  groupBy: 'properties.endpoint'
+});
+```
+
+## Best Practices
+
+<Tip>
+  **Choose appropriate bin sizes**: Use `hour` for 24-hour views, `day` for weekly/monthly views, and `month` for yearly analysis.
+</Tip>
+
+<Tip>
+  **Use billing cycles**: The `1bc` and `3bc` range options automatically align with customer billing cycles for accurate billing reports.
+</Tip>
+
+<Info>
+  Group by properties to segment usage analytics by regions, API keys, endpoints, or any custom dimension you track.
+</Info>
+
+<Warning>
+  `range` and `custom_range` are mutually exclusive. Provide one or the other, but not both.
+</Warning>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="List Events" icon="list" href="/api/events/list">
+    Get raw event data
+  </Card>
+  <Card title="Track Usage" icon="plus" href="/api/track">
+    Record usage events
+  </Card>
+  <Card title="Check Access" icon="shield-check" href="/api/check">
+    Check current usage and limits
+  </Card>
+  <Card title="Query Billing" icon="file-invoice-dollar" href="/api/query">
+    Get billing information
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Usage-based Billing Guide](/guides/usage-based-billing)
+- [Features Concept](/concepts/features)
+- [Track Endpoint](/api/track)

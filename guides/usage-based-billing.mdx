@@ -1,0 +1,458 @@
+---
+title: "Usage-Based Billing"
+description: "Complete guide to implementing usage-based billing with track and check endpoints"
+---
+
+## Overview
+
+Usage-based billing allows you to charge customers based on their actual consumption of your product. Autumn provides two powerful endpoints to implement this:
+
+- **`/track`** - Records usage and deducts from balance
+- **`/check`** - Validates feature access and gets balance information
+
+<Tip>
+The `/check` endpoint doesn't modify data - use it to validate access before performing actions. The `/track` endpoint actually records usage and deducts from balances.
+</Tip>
+
+## Understanding Track and Check
+
+| Endpoint | Purpose | Modifies Data |
+|----------|---------|---------------|
+| `/check` | Validate feature access, get balance | No |
+| `/track` | Record usage, deduct from balance | Yes |
+
+### When to Use Each
+
+**Use `/check` when:**
+- Validating if a user can perform an action
+- Displaying remaining balance to users
+- Implementing paywalls or upgrade prompts
+- Checking access without recording usage
+
+**Use `/track` when:**
+- A user consumes a resource (sends a message, generates an image, etc.)
+- Recording actual usage for billing
+- Deducting from prepaid balances
+
+## Setting Up Usage Tracking
+
+<Steps>
+  <Step title="Create a feature with metered usage">
+    Define features that represent consumable resources in your product.
+
+    ```typescript
+    const messagesFeature = {
+      id: "messages",
+      name: "Messages",
+      type: "metered",
+      usage_type: "consumable"
+    };
+    ```
+  </Step>
+
+  <Step title="Add the feature to a product">
+    Include the feature in a product with an initial balance.
+
+    ```typescript
+    const product = {
+      id: "pro-plan",
+      name: "Pro Plan",
+      items: [{
+        feature_id: "messages",
+        included_usage: 1000,  // 1000 messages included
+        reset: {
+          interval: "month",
+          anchor: "billing_cycle_start"
+        }
+      }]
+    };
+    ```
+  </Step>
+
+  <Step title="Check access before allowing the action">
+    Before a user performs an action, check if they have sufficient balance.
+
+    ```typescript
+    const checkResponse = await autumn.check({
+      customer_id: "customer_123",
+      feature_id: "messages",
+      required_balance: 1  // Checking for 1 message
+    });
+
+    if (!checkResponse.allowed) {
+      // Show upgrade prompt or paywall
+      return {
+        error: "Insufficient balance",
+        balance: checkResponse.balance
+      };
+    }
+    ```
+  </Step>
+
+  <Step title="Track usage after the action completes">
+    Once the user successfully performs the action, record the usage.
+
+    ```typescript
+    await autumn.track({
+      customer_id: "customer_123",
+      feature_id: "messages",
+      value: 1  // Deduct 1 message from balance
+    });
+    ```
+  </Step>
+</Steps>
+
+## Working with the Check Endpoint
+
+### Basic Check Request
+
+```typescript
+const response = await autumn.check({
+  customer_id: "customer_123",
+  feature_id: "messages",
+  required_balance: 100  // Optional: check if user has at least 100
+});
+
+console.log(response);
+// {
+//   allowed: true,
+//   customer_id: "customer_123",
+//   feature_id: "messages",
+//   balance: 1000,
+//   required_balance: 100,
+//   usage: 0,
+//   included_usage: 1000,
+//   overage_allowed: false,
+//   next_reset_at: "2026-03-01T00:00:00Z"
+// }
+```
+
+### Check Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `allowed` | boolean | Whether the customer has sufficient balance |
+| `balance` | number | Current remaining balance |
+| `required_balance` | number | Amount that was checked (if provided) |
+| `usage` | number | Total usage in current period |
+| `included_usage` | number | Total included usage for this period |
+| `overage_allowed` | boolean | Whether overage charges are enabled |
+| `next_reset_at` | string | ISO timestamp when balance resets |
+
+### Checking Without Required Balance
+
+```typescript
+// Just get current balance information
+const response = await autumn.check({
+  customer_id: "customer_123",
+  feature_id: "messages"
+});
+
+console.log(`Remaining: ${response.balance} messages`);
+```
+
+## Working with the Track Endpoint
+
+### Basic Track Request
+
+```typescript
+const response = await autumn.track({
+  customer_id: "customer_123",
+  feature_id: "messages",
+  value: 10  // Deduct 10 messages
+});
+
+console.log(response);
+// {
+//   customer_id: "customer_123",
+//   value: 10,
+//   balance: {
+//     feature_id: "messages",
+//     current_balance: 990,
+//     usage: 10,
+//     granted_balance: 1000
+//   }
+// }
+```
+
+### Track Request Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `customer_id` | Yes | Customer identifier |
+| `feature_id` | Yes* | Feature to track usage for |
+| `event_name` | Yes* | Event name (alternative to feature_id) |
+| `value` | No | Amount to track (default: 1) |
+| `properties` | No | Additional metadata for the event |
+| `idempotency_key` | No | Prevents duplicate recordings |
+| `timestamp` | No | When the event occurred (default: now) |
+
+<Note>
+*Either `feature_id` or `event_name` is required, but not both.
+</Note>
+
+### Tracking with Decimals
+
+```typescript
+// Track fractional usage (e.g., API compute time)
+await autumn.track({
+  customer_id: "customer_123",
+  feature_id: "compute_seconds",
+  value: 23.47
+});
+```
+
+<Warning>
+Always use `Decimal.js` or similar libraries when calculating expected balances to avoid floating-point precision errors.
+</Warning>
+
+### Event-Based Tracking
+
+Track multiple features with a single event:
+
+```typescript
+// Define an event that affects multiple features
+await autumn.track({
+  customer_id: "customer_123",
+  event_name: "document_generated",  // Triggers all listening features
+  value: 1
+});
+
+// If both "ai_generations" and "storage" features
+// listen to "document_generated" event, both will be deducted
+```
+
+### Idempotent Tracking
+
+Prevent duplicate usage recording:
+
+```typescript
+await autumn.track({
+  customer_id: "customer_123",
+  feature_id: "api_calls",
+  value: 1,
+  idempotency_key: `request_${requestId}`
+});
+
+// Retrying with the same key won't double-charge
+await autumn.track({
+  customer_id: "customer_123",
+  feature_id: "api_calls",
+  value: 1,
+  idempotency_key: `request_${requestId}`  // Same key = no double charge
+});
+```
+
+## Implementing Usage Limits
+
+### Hard Limits (Block Overages)
+
+```typescript
+// Configure feature to reject usage over limit
+const feature = {
+  id: "api_calls",
+  type: "metered",
+  usage_type: "consumable",
+  overage_allowed: false  // Hard limit
+};
+
+// When balance is exhausted:
+const check = await autumn.check({
+  customer_id: "customer_123",
+  feature_id: "api_calls"
+});
+
+if (!check.allowed) {
+  throw new Error("API call limit reached. Please upgrade your plan.");
+}
+```
+
+### Soft Limits (Allow Overages with Charges)
+
+```typescript
+// Configure feature to allow overages
+const feature = {
+  id: "api_calls",
+  type: "metered",
+  usage_type: "consumable",
+  overage_allowed: true,
+  overage_price: 0.01  // $0.01 per overage unit
+};
+
+// Usage beyond included amount generates charges
+await autumn.track({
+  customer_id: "customer_123",
+  feature_id: "api_calls",
+  value: 1
+});
+// If over limit, customer is charged $0.01
+```
+
+### Capping Usage
+
+```typescript
+// Prevent usage from exceeding available balance
+await autumn.track({
+  customer_id: "customer_123",
+  feature_id: "api_calls",
+  value: 100,
+  overage_behavior: "cap"  // Only deducts available balance
+});
+```
+
+## Metering Strategies
+
+### Real-Time Metering
+
+Track usage as it happens:
+
+```typescript
+app.post("/api/send-message", async (req, res) => {
+  const { userId, message } = req.body;
+
+  // Check access
+  const check = await autumn.check({
+    customer_id: userId,
+    feature_id: "messages",
+    required_balance: 1
+  });
+
+  if (!check.allowed) {
+    return res.status(403).json({ error: "Insufficient balance" });
+  }
+
+  // Perform action
+  await sendMessage(message);
+
+  // Track usage
+  await autumn.track({
+    customer_id: userId,
+    feature_id: "messages",
+    value: 1
+  });
+
+  res.json({ success: true });
+});
+```
+
+### Batch Metering
+
+Accumulate and track usage in batches:
+
+```typescript
+// Buffer usage events
+const usageBuffer = [];
+
+function bufferUsage(customerId, featureId, value) {
+  usageBuffer.push({ customerId, featureId, value });
+}
+
+// Flush every minute
+setInterval(async () => {
+  const batch = [...usageBuffer];
+  usageBuffer.length = 0;
+
+  // Group by customer and feature
+  const grouped = batch.reduce((acc, item) => {
+    const key = `${item.customerId}:${item.featureId}`;
+    acc[key] = (acc[key] || 0) + item.value;
+    return acc;
+  }, {});
+
+  // Track aggregated usage
+  for (const [key, value] of Object.entries(grouped)) {
+    const [customerId, featureId] = key.split(":");
+    await autumn.track({ customer_id: customerId, feature_id: featureId, value });
+  }
+}, 60000);
+```
+
+## Best Practices
+
+<Warning>
+**Always check before tracking**: Use `/check` to validate access before allowing actions. This prevents negative balances and provides better UX.
+</Warning>
+
+<Tip>
+**Use idempotency keys**: For critical operations, always include an idempotency key to prevent duplicate charges on retries.
+</Tip>
+
+### Error Handling
+
+```typescript
+try {
+  const check = await autumn.check({
+    customer_id: customerId,
+    feature_id: "api_calls"
+  });
+
+  if (!check.allowed) {
+    // Handle insufficient balance gracefully
+    return showUpgradePrompt(check.balance);
+  }
+
+  await performAction();
+  await autumn.track({
+    customer_id: customerId,
+    feature_id: "api_calls",
+    value: 1,
+    idempotency_key: `action_${actionId}`
+  });
+} catch (error) {
+  // Handle API errors
+  console.error("Usage tracking failed:", error);
+  // Decide: block action or allow with logging?
+}
+```
+
+### Displaying Usage to Users
+
+```typescript
+// Get current usage stats
+const check = await autumn.check({
+  customer_id: customerId,
+  feature_id: "api_calls"
+});
+
+const usagePercent = (check.usage / check.included_usage) * 100;
+const remaining = check.balance;
+
+console.log(`You've used ${usagePercent}% of your API calls`);
+console.log(`${remaining} calls remaining this month`);
+console.log(`Resets on ${new Date(check.next_reset_at).toLocaleDateString()}`);
+```
+
+## Concurrent Usage
+
+Autumn handles concurrent track requests atomically:
+
+```typescript
+// Multiple simultaneous requests are handled correctly
+const requests = Array(10).fill(null).map(() =>
+  autumn.track({
+    customer_id: customerId,
+    feature_id: "api_calls",
+    value: 1
+  })
+);
+
+await Promise.all(requests);
+// Balance is correctly decreased by 10 (not lost updates)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Credit Systems" icon="coins" href="/guides/credit-systems">
+    Implement flexible credit-based billing
+  </Card>
+  <Card title="Subscriptions" icon="repeat" href="/guides/subscriptions">
+    Manage subscription lifecycle
+  </Card>
+  <Card title="Webhooks" icon="webhook" href="/guides/webhooks">
+    React to usage events in real-time
+  </Card>
+  <Card title="Stripe Integration" icon="stripe" href="/guides/stripe-integration">
+    Configure Stripe for billing
+  </Card>
+</CardGroup>

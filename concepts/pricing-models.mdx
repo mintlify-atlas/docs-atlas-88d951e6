@@ -1,0 +1,775 @@
+---
+title: Pricing Models
+description: Explore the four main pricing models supported by Autumn
+---
+
+# Pricing Models
+
+Autumn supports four main pricing models that can be mixed and matched to create sophisticated billing systems. Based on the README at `source/README.md:83`, here are the models Autumn was built to support:
+
+<CardGroup cols={2}>
+  <Card title="Usage & Overage" icon="bolt">
+    Set real-time usage limits and charge when customers exceed them
+  </Card>
+  <Card title="Credits" icon="coins">
+    Monetary or arbitrary credits that features draw from
+  </Card>
+  <Card title="Seat-based" icon="users">
+    Bill for users, workspaces, or other entities
+  </Card>
+  <Card title="Pay Upfront" icon="credit-card">
+    Fixed quantity purchased upfront, consumed over time
+  </Card>
+</CardGroup>
+
+## 1. Usage & Overage
+
+Charge customers based on consumption, with optional included usage and overage charges.
+
+### How It Works
+
+1. Set a usage limit in the plan (e.g., 10,000 API calls/month)
+2. Track usage with `autumn.track()`
+3. When limit is reached, charge for overages
+4. Usage resets at the interval (monthly, yearly, etc.)
+
+### Configuration
+
+From `source/shared/models/productModels/priceModels/priceConfig/usagePriceConfig.ts`:
+
+```json
+{
+  "id": "api-plan",
+  "name": "API Plan",
+  "price": {
+    "amount": 4900,  // $49 base subscription
+    "interval": "month"
+  },
+  "items": [
+    {
+      "feature_id": "api_calls",
+      "included": 10000,  // 10k calls included
+      "reset": {
+        "interval": "month"
+      },
+      "price": {
+        "amount": 10,  // $0.10 per call over limit
+        "interval": "month",
+        "billing_units": 1,
+        "billing_method": "per_unit"
+      }
+    }
+  ]
+}
+```
+
+### Billing Methods
+
+From `source/shared/api/products/components/billingMethod.ts`:
+
+<Accordion title="per_unit">
+  Charge for each individual unit over the limit.
+  
+  ```json
+  {
+    "price": {
+      "amount": 10,        // $0.10 per unit
+      "billing_units": 1,
+      "billing_method": "per_unit"
+    }
+  }
+  ```
+  
+  **Example**: Customer uses 12,500 API calls
+  - Included: 10,000 calls
+  - Overage: 2,500 calls × $0.10 = $2.50
+  - **Total**: $49.00 (base) + $2.50 (overage) = **$51.50**
+</Accordion>
+
+<Accordion title="package">
+  Charge per package of units (rounds up).
+  
+  ```json
+  {
+    "price": {
+      "amount": 1000,       // $10 per package
+      "billing_units": 1000, // 1000 units per package
+      "billing_method": "package"
+    }
+  }
+  ```
+  
+  **Example**: Customer uses 11,500 API calls
+  - Included: 10,000 calls
+  - Overage: 1,500 calls → 2 packages (rounds up)
+  - **Total**: $49.00 (base) + $20.00 (2 packages) = **$69.00**
+</Accordion>
+
+<Accordion title="tiered">
+  Different rates at different volume levels.
+  
+  ```json
+  {
+    "price": {
+      "tiers": [
+        { "to": 10000, "amount": 1000 },    // $10/1k
+        { "to": 50000, "amount": 800 },     // $8/1k
+        { "to": "infinite", "amount": 600 } // $6/1k
+      ],
+      "billing_units": 1000,
+      "billing_method": "tiered"
+    }
+  }
+  ```
+  
+  **Example**: Customer uses 65,000 API calls
+  - Included: 10,000 calls (in base price)
+  - Overage: 55,000 calls
+    - First 10k: 10 × $10 = $100
+    - Next 40k: 40 × $8 = $320
+    - Last 5k: 5 × $6 = $30
+  - **Total**: $49 (base) + $450 (overage) = **$499**
+</Accordion>
+
+### Real-world Example
+
+```typescript
+// Feature definition
+const apiCallsFeature = {
+  id: "api_calls",
+  name: "API Calls",
+  type: "metered",
+  event_names: ["api.request"],
+  config: {
+    usage_type: "single_use",
+    aggregate: { type: "sum", property: null }
+  },
+  display: {
+    singular: "API call",
+    plural: "API calls"
+  }
+};
+
+// Plan with overage
+const usagePlan = {
+  id: "usage-plan",
+  name: "Usage Plan",
+  price: { amount: 2900, interval: "month" },
+  items: [
+    {
+      feature_id: "api_calls",
+      included: 5000,
+      reset: { interval: "month" },
+      price: {
+        tiers: [
+          { to: 10000, amount: 500 },  // $5/1k for first 10k overage
+          { to: "infinite", amount: 300 }  // $3/1k after that
+        ],
+        billing_units: 1000,
+        billing_method: "tiered"
+      }
+    }
+  ]
+};
+
+// Implementation
+async function handleApiRequest(req, res) {
+  const customerId = req.user.id;
+  
+  // Check limit
+  const { data } = await autumn.check({
+    customerId,
+    featureId: "api_calls"
+  });
+  
+  if (!data.allowed && !data.overage?.enabled) {
+    // Hard limit - no overages allowed
+    return res.status(429).json({ error: "Rate limit exceeded" });
+  }
+  
+  // Process request
+  const result = await processRequest(req);
+  
+  // Track usage
+  await autumn.track({
+    customerId,
+    featureId: "api_calls",
+    value: 1
+  });
+  
+  // Warn if approaching limit
+  if (data.remaining && data.remaining < 100) {
+    res.setHeader('X-Rate-Limit-Remaining', data.remaining);
+  }
+  
+  return res.json(result);
+}
+```
+
+## 2. Credits
+
+A universal credit pool that multiple features can draw from at different rates.
+
+### How It Works
+
+1. Create a credit system feature
+2. Define credit costs for other features
+3. Customers purchase credits (one-time or subscription)
+4. Features automatically deduct credits when used
+
+### Configuration
+
+From `source/shared/models/featureModels/featureConfig/creditConfig.ts`:
+
+```json
+// Credit feature
+{
+  "id": "credits",
+  "name": "Credits",
+  "type": "credit_system",
+  "config": {
+    "schema": [
+      {
+        "metered_feature_id": "ai_basic",
+        "credit_amount": 1  // 1 credit per basic request
+      },
+      {
+        "metered_feature_id": "ai_advanced",
+        "credit_amount": 5  // 5 credits per advanced request
+      },
+      {
+        "metered_feature_id": "image_generation",
+        "credit_amount": 10  // 10 credits per image
+      }
+    ],
+    "usage_type": "single_use"
+  }
+}
+
+// Credit purchase plans
+[
+  {
+    "id": "credits-100",
+    "name": "100 Credits",
+    "price": { "amount": 1000, "interval": "once" },
+    "items": [
+      {
+        "feature_id": "credits",
+        "included": 100,
+        "reset": null  // No reset, credits persist
+      }
+    ]
+  },
+  {
+    "id": "credits-monthly",
+    "name": "Monthly Credits",
+    "price": { "amount": 4900, "interval": "month" },
+    "items": [
+      {
+        "feature_id": "credits",
+        "included": 500,
+        "reset": { "interval": "month" }  // Refresh monthly
+      }
+    ]
+  }
+]
+```
+
+### Real-world Example: AI Platform
+
+```typescript
+// Define metered features
+const features = [
+  {
+    id: "gpt4_requests",
+    name: "GPT-4 Requests",
+    type: "metered",
+    config: { usage_type: "single_use" }
+  },
+  {
+    id: "gpt35_requests",
+    name: "GPT-3.5 Requests",
+    type: "metered",
+    config: { usage_type: "single_use" }
+  },
+  {
+    id: "image_generation",
+    name: "Image Generation",
+    type: "metered",
+    config: { usage_type: "single_use" }
+  }
+];
+
+// Credit system
+const creditsFeature = {
+  id: "ai_credits",
+  name: "AI Credits",
+  type: "credit_system",
+  config: {
+    schema: [
+      { metered_feature_id: "gpt4_requests", credit_amount: 10 },
+      { metered_feature_id: "gpt35_requests", credit_amount: 2 },
+      { metered_feature_id: "image_generation", credit_amount: 5 }
+    ],
+    usage_type: "single_use"
+  }
+};
+
+// Credit packages
+const creditPlans = [
+  { id: "starter", amount: 1000, credits: 100 },
+  { id: "pro", amount: 4500, credits: 500 },    // 10% bonus
+  { id: "enterprise", amount: 9000, credits: 1100 }  // 22% bonus
+];
+
+// Implementation
+async function generateAI(userId: string, model: string, prompt: string) {
+  const featureId = model === "gpt-4" ? "gpt4_requests" : "gpt35_requests";
+  
+  // Check credits
+  const { data } = await autumn.check({
+    customerId: userId,
+    featureId
+  });
+  
+  if (!data.allowed) {
+    throw new Error("Insufficient credits");
+  }
+  
+  // Show cost to user
+  const creditCost = model === "gpt-4" ? 10 : 2;
+  console.log(`This request will cost ${creditCost} credits`);
+  console.log(`You have ${data.remaining} credits remaining`);
+  
+  // Generate
+  const result = await callOpenAI(model, prompt);
+  
+  // Track usage (automatically deducts credits)
+  await autumn.track({
+    customerId: userId,
+    featureId,
+    value: 1
+  });
+  
+  return result;
+}
+```
+
+### Credit Topups
+
+```typescript
+// Allow customers to buy more credits
+async function purchaseCredits(userId: string, packageId: string) {
+  const { data } = await autumn.attach({
+    customerId: userId,
+    productId: packageId  // e.g., "credits-100"
+  });
+  
+  if (data.url) {
+    // Redirect to Stripe Checkout
+    return data.url;
+  }
+  
+  // Credits added immediately
+  const { data: balance } = await autumn.check({
+    customerId: userId,
+    featureId: "credits"
+  });
+  
+  return balance.remaining;  // New credit balance
+}
+```
+
+## 3. Seat-based with Per-seat Limits
+
+Bill customers per user, workspace, or other entity, with optional per-entity usage limits.
+
+### How It Works
+
+1. Create a feature for the entity type (e.g., "team_seats")
+2. Create entities for each resource (e.g., team members)
+3. Autumn counts entities and bills per entity
+4. Optionally track per-entity usage
+
+### Configuration
+
+From `source/shared/models/cusModels/entityModels/entityModels.ts`:
+
+```json
+{
+  "id": "team-plan",
+  "name": "Team Plan",
+  "price": {
+    "amount": 4900,  // $49 base price
+    "interval": "month"
+  },
+  "items": [
+    {
+      "feature_id": "team_seats",
+      "included": 5,  // 5 seats included
+      "entity_feature_id": "team_seats",  // Enable entity tracking
+      "price": {
+        "amount": 1500,  // $15 per additional seat
+        "interval": "month",
+        "billing_units": 1,
+        "billing_method": "per_unit"
+      }
+    }
+  ]
+}
+```
+
+### Real-world Example: Team Collaboration
+
+```typescript
+// Feature definition
+const seatsFeature = {
+  id: "team_seats",
+  name: "Team Seats",
+  type: "metered",
+  config: {
+    usage_type: "continuous_use",
+    aggregate: { type: "sum", property: null }
+  },
+  display: {
+    singular: "seat",
+    plural: "seats"
+  }
+};
+
+// Plan with seats
+const teamPlan = {
+  id: "team-plan",
+  name: "Team Plan",
+  price: { amount: 4900, interval: "month" },
+  items: [
+    {
+      feature_id: "team_seats",
+      included: 5,
+      entity_feature_id: "team_seats",
+      price: {
+        amount: 1500,
+        interval: "month",
+        billing_units: 1,
+        billing_method: "per_unit"
+      }
+    }
+  ]
+};
+
+// Add team member
+async function addTeamMember(teamId: string, userId: string, email: string) {
+  // Check seats available
+  const { data } = await autumn.check({
+    customerId: teamId,
+    featureId: "team_seats"
+  });
+  
+  if (data.remaining === 0) {
+    // Calculate cost for additional seat
+    const pricePerSeat = 15;  // $15/month
+    
+    throw new Error(
+      `Seat limit reached (${data.limit} seats). ` +
+      `Add more seats for $${pricePerSeat}/seat/month.`
+    );
+  }
+  
+  // Add to database
+  await db.teams.addMember(teamId, userId);
+  
+  // Create entity
+  await autumn.createEntity({
+    customerId: teamId,
+    featureId: "team_seats",
+    entityId: userId,
+    name: email
+  });
+  
+  // Billing updated automatically
+  // If over included limit, customer charged $15/month for this seat
+}
+
+// Remove team member
+async function removeTeamMember(teamId: string, userId: string) {
+  await db.teams.removeMember(teamId, userId);
+  
+  // Delete entity
+  await autumn.deleteEntity({
+    customerId: teamId,
+    featureId: "team_seats",
+    entityId: userId
+  });
+  
+  // Billing adjusted (prorated credit)
+}
+```
+
+### Billing Calculation
+
+**Scenario**: Customer on Team Plan with 7 active team members
+
+- Base price: $49/month (includes 5 seats)
+- Additional seats: 7 - 5 = 2 seats
+- Additional cost: 2 × $15 = $30/month
+- **Total**: $49 + $30 = **$79/month**
+
+<Info>
+When entities are added/removed mid-cycle, Autumn automatically prorates the charges.
+</Info>
+
+## 4. Pay Upfront
+
+Customers purchase a fixed quantity upfront which is consumed over time without recurring charges.
+
+### How It Works
+
+1. Customer makes one-time purchase of resources
+2. Resources are added to their account
+3. Usage is tracked and deducted
+4. No automatic renewal (customer buys more when needed)
+
+### Configuration
+
+```json
+[
+  {
+    "id": "api-calls-10k",
+    "name": "10,000 API Calls",
+    "price": {
+      "amount": 4900,  // $49 one-time
+      "interval": "once"
+    },
+    "items": [
+      {
+        "feature_id": "api_calls",
+        "included": 10000,
+        "reset": null  // No reset - lasts until consumed
+      }
+    ]
+  },
+  {
+    "id": "api-calls-50k",
+    "name": "50,000 API Calls",
+    "price": {
+      "amount": 19900,  // $199 one-time (20% discount)
+      "interval": "once"
+    },
+    "items": [
+      {
+        "feature_id": "api_calls",
+        "included": 50000,
+        "reset": null
+      }
+    ]
+  }
+]
+```
+
+### Real-world Example: SMS Messages
+
+```typescript
+// SMS packages
+const smsPackages = [
+  { id: "sms-1000", amount: 2500, messages: 1000 },
+  { id: "sms-5000", amount: 10000, messages: 5000 },
+  { id: "sms-10000", amount: 18000, messages: 10000 }
+];
+
+// Feature definition
+const smsFeature = {
+  id: "sms_messages",
+  name: "SMS Messages",
+  type: "metered",
+  config: {
+    usage_type: "single_use",
+    aggregate: { type: "sum", property: null }
+  },
+  display: {
+    singular: "SMS message",
+    plural: "SMS messages"
+  }
+};
+
+// Purchase SMS package
+async function purchaseSMS(userId: string, packageId: string) {
+  const { data } = await autumn.attach({
+    customerId: userId,
+    productId: packageId
+  });
+  
+  if (data.url) {
+    return { checkoutUrl: data.url };
+  }
+  
+  // Messages added to balance
+  const { data: balance } = await autumn.check({
+    customerId: userId,
+    featureId: "sms_messages"
+  });
+  
+  return { remaining: balance.remaining };
+}
+
+// Send SMS
+async function sendSMS(userId: string, to: string, message: string) {
+  // Check balance
+  const { data } = await autumn.check({
+    customerId: userId,
+    featureId: "sms_messages"
+  });
+  
+  if (!data.allowed || data.remaining === 0) {
+    throw new Error(
+      "Insufficient SMS balance. Purchase more messages to continue."
+    );
+  }
+  
+  // Send message
+  await twilioClient.messages.create({ to, body: message });
+  
+  // Track usage
+  await autumn.track({
+    customerId: userId,
+    featureId: "sms_messages",
+    value: 1
+  });
+  
+  // Return new balance
+  const { data: newBalance } = await autumn.check({
+    customerId: userId,
+    featureId: "sms_messages"
+  });
+  
+  return { remaining: newBalance.remaining };
+}
+
+// Low balance notification
+async function checkSMSBalance(userId: string) {
+  const { data } = await autumn.check({
+    customerId: userId,
+    featureId: "sms_messages"
+  });
+  
+  if (data.remaining < 100) {
+    // Notify user to top up
+    await sendEmail(userId, {
+      subject: "Low SMS Balance",
+      body: `You have ${data.remaining} SMS messages remaining.`
+    });
+  }
+}
+```
+
+## Combining Models
+
+Autumn's power comes from combining these models:
+
+### Example: Complete SaaS Platform
+
+```typescript
+const completePlan = {
+  id: "pro-plan",
+  name: "Pro Plan",
+  
+  // Base subscription
+  price: {
+    amount: 9900,
+    interval: "month"
+  },
+  
+  items: [
+    // Seat-based pricing
+    {
+      feature_id: "team_seats",
+      included: 10,
+      entity_feature_id: "team_seats",
+      price: {
+        amount: 2000,  // $20/seat over 10
+        interval: "month",
+        billing_method: "per_unit"
+      }
+    },
+    
+    // Usage with overage
+    {
+      feature_id: "api_calls",
+      included: 100000,
+      reset: { interval: "month" },
+      price: {
+        tiers: [
+          { to: 500000, amount: 500 },
+          { to: "infinite", amount: 300 }
+        ],
+        billing_units: 1000,
+        billing_method: "tiered"
+      }
+    },
+    
+    // Boolean features
+    {
+      feature_id: "priority_support",
+      included: 1,
+      unlimited: false
+    },
+    {
+      feature_id: "advanced_analytics",
+      included: 1,
+      unlimited: false
+    },
+    
+    // Storage with soft limit
+    {
+      feature_id: "storage_gb",
+      included: 100,
+      unlimited: false,
+      reset: null  // Doesn't reset
+    }
+  ]
+};
+```
+
+**Billing for this plan**:
+- Base: $99/month
+- 15 team members: +$100/month (5 over limit × $20)
+- 650,000 API calls: +$75/month (550k overage: 500k @ $0.50/k + 50k @ $0.30/k)
+- **Total**: $274/month
+
+## Best Practices
+
+<Tip>
+**Start simple**: Begin with one pricing model and add complexity as needed. Most products start with simple subscriptions.
+</Tip>
+
+<Tip>
+**Communicate costs**: Always show customers the cost of actions before they take them (e.g., "This will use 10 credits").
+</Tip>
+
+<Tip>
+**Set reasonable limits**: Include enough in base plans that most customers don't hit limits. Overages should be for edge cases.
+</Tip>
+
+<Note>
+**Test thoroughly**: Test all pricing scenarios in development before going to production. Billing bugs are expensive!
+</Note>
+
+<Tip>
+**Monitor usage**: Track which features customers use most and adjust pricing accordingly.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Usage-based Billing" icon="chart-line" href="/guides/usage-based-billing">
+    Complete guide to implementing usage-based pricing
+  </Card>
+  <Card title="Credit Systems" icon="coins" href="/guides/credit-systems">
+    Build a credit-based pricing system
+  </Card>
+  <Card title="Seat-based Pricing" icon="users" href="/guides/seat-based-pricing">
+    Implement per-seat billing
+  </Card>
+  <Card title="Subscriptions" icon="repeat" href="/guides/subscriptions">
+    Set up subscription plans
+  </Card>
+</CardGroup>

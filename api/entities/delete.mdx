@@ -1,0 +1,361 @@
+---
+title: "Delete Entity"
+description: "Delete an entity and free up capacity"
+---
+
+## Overview
+
+Deletes an entity (soft delete by default), freeing up capacity and adjusting billing automatically. This is used when removing team members, deleting workspaces, or removing any other tracked resource.
+
+## Endpoint
+
+```
+DELETE /v1/entities/{entity_id}
+```
+
+## Authentication
+
+Requires a secret API key in the Authorization header:
+
+```
+Authorization: Bearer your_secret_key
+```
+
+## Path Parameters
+
+<ParamField path="entity_id" type="string" required>
+  The unique identifier of the entity to delete
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="hard_delete" type="boolean" default={false}>
+  Permanently delete the entity from the database. By default, entities are soft-deleted (marked as deleted but retained for billing history).
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Whether the deletion was successful
+</ResponseField>
+
+<ResponseField name="id" type="string">
+  The ID of the deleted entity
+</ResponseField>
+
+<ResponseField name="deleted" type="boolean">
+  Always `true` for successful deletions
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash curl (soft delete)
+curl -X DELETE https://api.useautumn.com/v1/entities/user_456 \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```bash curl (hard delete)
+curl -X DELETE "https://api.useautumn.com/v1/entities/user_456?hard_delete=true" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'sk_test_...'
+});
+
+// Soft delete (default)
+const result = await autumn.entities.delete('user_456');
+
+console.log(result.success); // true
+```
+
+```javascript JavaScript SDK (hard delete)
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'sk_test_...'
+});
+
+// Permanently delete
+const result = await autumn.entities.delete('user_456', {
+  hardDelete: true
+});
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: process.env.AUTUMN_SECRET_KEY!
+});
+
+const result = await autumn.entities.delete('user_456');
+```
+
+```python Python
+import requests
+
+response = requests.delete(
+    'https://api.useautumn.com/v1/entities/user_456',
+    headers={
+        'Authorization': 'Bearer sk_test_...',
+    }
+)
+
+result = response.json()
+print(result['success'])
+```
+
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "success": true,
+  "id": "user_456",
+  "deleted": true
+}
+```
+
+## Use Cases
+
+### Remove Team Member
+
+```javascript
+// Remove a team member when they leave
+async function removeTeamMember(teamId, userId) {
+  // Remove from your database first
+  await db.teams.removeMember(teamId, userId);
+  
+  // Delete the entity in Autumn
+  const result = await autumn.entities.delete(userId);
+  
+  if (result.success) {
+    console.log(`Team member ${userId} removed. Seat freed up.`);
+  }
+}
+```
+
+### Delete Workspace
+
+```javascript
+// Delete a workspace and free up capacity
+async function deleteWorkspace(userId, workspaceId) {
+  // Check if user owns the workspace
+  const workspace = await db.workspaces.findById(workspaceId);
+  if (workspace.ownerId !== userId) {
+    throw new Error('Unauthorized');
+  }
+  
+  // Delete from database
+  await db.workspaces.delete(workspaceId);
+  
+  // Delete entity
+  await autumn.entities.delete(workspaceId);
+  
+  // Check new usage
+  const check = await autumn.check({
+    customerId: userId,
+    featureId: 'workspaces'
+  });
+  
+  return {
+    success: true,
+    remainingWorkspaces: check.remaining
+  };
+}
+```
+
+### Revoke API Key
+
+```javascript
+// Revoke an API key
+async function revokeApiKey(userId, apiKey) {
+  // Invalidate in database
+  await db.apiKeys.delete(apiKey);
+  
+  // Delete entity
+  await autumn.entities.delete(apiKey);
+  
+  console.log(`API key ${apiKey} revoked`);
+}
+```
+
+### Batch Delete
+
+```javascript
+// Remove all entities for a customer (e.g., when canceling)
+async function removeAllSeats(customerId) {
+  const entities = await autumn.entities.list({
+    customerId,
+    featureId: 'team_seats'
+  });
+  
+  const deletions = entities.list.map(entity =>
+    autumn.entities.delete(entity.id)
+  );
+  
+  await Promise.all(deletions);
+  
+  return entities.total;
+}
+```
+
+## Soft Delete vs Hard Delete
+
+### Soft Delete (Default)
+
+Entities are marked as deleted but remain in the database:
+
+- **Billing history preserved**: Past invoices and usage data remain accurate
+- **Audit trail maintained**: You can see when entities were deleted
+- **Not counted toward limits**: Deleted entities don't count toward usage
+- **Can be queried**: Use `include_deleted=true` in list requests
+
+```javascript
+// Soft delete (recommended)
+await autumn.entities.delete('user_456');
+
+// Entity still exists but is marked deleted
+const entities = await autumn.entities.list({
+  customerId: 'team_123',
+  includeDeleted: true
+});
+// entities.list includes soft-deleted entities
+```
+
+### Hard Delete
+
+Permanently removes the entity from the database:
+
+- **Data loss**: Entity is completely removed
+- **Billing history affected**: May impact historical reports
+- **Cannot be recovered**: Deletion is permanent
+- **Use sparingly**: Only when you need to comply with data deletion requests
+
+```javascript
+// Hard delete (permanent)
+await autumn.entities.delete('user_456', { hardDelete: true });
+
+// Entity is completely gone
+const entity = await autumn.entities.get('user_456');
+// Error: Entity not found
+```
+
+## Billing Impact
+
+Deleting an entity immediately affects billing:
+
+### Proration
+
+```javascript
+// Day 1: Customer has 7 seats (5 included + 2 extra at $15/month each)
+// Monthly bill: $49 (base) + $30 (extra seats) = $79
+
+// Day 15: Delete one entity (remove a seat)
+await autumn.entities.delete('user_456');
+// Prorated credit: ~$7.50 (15 days of $15/month)
+// New monthly bill: $49 + $15 = $64
+```
+
+### Stripe Updates
+
+Autumn automatically updates Stripe subscriptions:
+
+```javascript
+// Delete entity
+const result = await autumn.entities.delete('user_456');
+
+// Autumn immediately:
+// 1. Removes the subscription item in Stripe
+// 2. Applies prorated credit to next invoice
+// 3. Updates usage counts
+```
+
+<Info>
+  Autumn handles all Stripe subscription updates automatically. You don't need to manually adjust subscriptions or calculate proration.
+</Info>
+
+## Important Notes
+
+<Warning>
+  Always delete entities from your database **before** deleting them in Autumn to prevent sync issues.
+</Warning>
+
+<Tip>
+  Use soft delete (default) unless you have a specific reason to hard delete. Soft delete preserves billing history and audit trails.
+</Tip>
+
+<Tip>
+  After deleting entities, consider calling `/check` to get the updated usage and inform users of their new capacity.
+</Tip>
+
+## Error Responses
+
+<ResponseField name="404 Not Found">
+  The entity with the specified ID does not exist
+  
+  ```json
+  {
+    "error": {
+      "code": "not_found",
+      "message": "Entity not found"
+    }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="401 Unauthorized">
+  Invalid or missing API key
+  
+  ```json
+  {
+    "error": {
+      "code": "unauthorized",
+      "message": "Invalid API key"
+    }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="403 Forbidden">
+  You don't have permission to delete this entity
+  
+  ```json
+  {
+    "error": {
+      "code": "forbidden",
+      "message": "Cannot delete entity"
+    }
+  }
+  ```
+</ResponseField>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Create Entity" icon="plus" href="/api/entities/create">
+    Create a new entity
+  </Card>
+  <Card title="Get Entity" icon="eye" href="/api/entities/get">
+    Get entity details
+  </Card>
+  <Card title="List Entities" icon="list" href="/api/entities/list">
+    List all entities
+  </Card>
+  <Card title="Check Access" icon="shield-check" href="/api/check">
+    Check updated usage after deletion
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Entities Concept Guide](/concepts/entities)
+- [Seat-based Pricing Guide](/guides/seat-based-pricing)
+- [Track Usage](/api/track)

@@ -1,0 +1,242 @@
+---
+title: "JavaScript SDK"
+description: "Use Autumn with JavaScript and TypeScript"
+icon: "js"
+---
+
+## Overview
+
+The `autumn-js` SDK provides a simple way to integrate Autumn's billing system into your JavaScript or TypeScript application. With just three core methods, you can handle all your billing logic.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install autumn-js
+```
+
+```bash yarn
+yarn add autumn-js
+```
+
+```bash pnpm
+pnpm add autumn-js
+```
+
+```bash bun
+bun add autumn-js
+```
+
+</CodeGroup>
+
+## Initialization
+
+Create an Autumn client with your public key:
+
+```typescript
+import { Autumn } from 'autumn-js';
+
+const autumn = new Autumn({
+  publicKey: 'your_public_key',
+  customerId: 'user_123', // Your customer's unique identifier
+});
+```
+
+<Note>
+  You can find your public key in the [Autumn dashboard](https://app.useautumn.com) under **Settings → API Keys**.
+</Note>
+
+## Core Methods
+
+The SDK provides three main methods to handle all your billing needs:
+
+### attach()
+
+Handle all purchase flows with a single function call. This method manages upgrades, downgrades, and new subscriptions.
+
+```typescript
+// Upgrade to a paid plan
+await autumn.attach({
+  productId: 'pro',
+});
+
+// The SDK will automatically:
+// - Return a Stripe Checkout URL for new purchases
+// - Handle plan upgrades/downgrades for existing customers
+// - Manage proration and billing cycles
+```
+
+<Tip>
+  The `attach()` method intelligently determines whether to create a new subscription or modify an existing one.
+</Tip>
+
+**Parameters:**
+
+- `productId` (string, required): The ID of the product to attach
+- `planId` (string, optional): Specific plan ID if the product has multiple plans
+- `successUrl` (string, optional): URL to redirect after successful payment
+- `cancelUrl` (string, optional): URL to redirect if user cancels
+
+**Returns:**
+
+```typescript
+interface AttachResponse {
+  checkoutUrl?: string; // Present for new purchases
+  success: boolean;
+  message?: string;
+}
+```
+
+### check()
+
+Verify if a customer has access to a feature and check their remaining usage.
+
+```typescript
+// Check access to a feature
+const { data } = await autumn.check({
+  featureId: 'ai_tokens',
+});
+
+if (!data.allowed) {
+  alert('AI limit reached');
+}
+
+// Access usage information
+console.log(`Remaining: ${data.remaining}`);
+console.log(`Limit: ${data.limit}`);
+```
+
+**Parameters:**
+
+- `featureId` (string, required): The ID of the feature to check
+- `value` (number, optional): Amount to check against (useful for pre-validation)
+
+**Returns:**
+
+```typescript
+interface CheckResponse {
+  allowed: boolean;
+  remaining: number;
+  limit: number;
+  resetAt?: Date;
+}
+```
+
+### track()
+
+Record usage events for metered or usage-based features.
+
+```typescript
+// Track AI token usage
+await autumn.track({
+  featureId: 'ai_tokens',
+  value: 1312,
+});
+
+// Track API calls
+await autumn.track({
+  featureId: 'api_calls',
+  value: 1,
+});
+```
+
+**Parameters:**
+
+- `featureId` (string, required): The ID of the feature to track
+- `value` (number, required): The amount to track
+- `metadata` (object, optional): Additional data to store with the event
+
+**Returns:**
+
+```typescript
+interface TrackResponse {
+  success: boolean;
+  newTotal: number;
+}
+```
+
+## Error Handling
+
+The SDK throws typed errors that you can catch and handle:
+
+```typescript
+import { Autumn, AutumnError } from 'autumn-js';
+
+try {
+  await autumn.track({
+    featureId: 'ai_tokens',
+    value: 1000,
+  });
+} catch (error) {
+  if (error instanceof AutumnError) {
+    console.error(`Autumn error: ${error.message}`);
+    console.error(`Code: ${error.code}`);
+  } else {
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+**Common error codes:**
+
+- `UNAUTHORIZED`: Invalid API key
+- `FORBIDDEN`: Customer doesn't have access
+- `NOT_FOUND`: Feature or product not found
+- `RATE_LIMITED`: Too many requests
+- `VALIDATION_ERROR`: Invalid parameters
+
+## TypeScript Support
+
+The SDK is written in TypeScript and provides full type definitions:
+
+```typescript
+import type { 
+  AutumnConfig, 
+  AttachParams, 
+  CheckParams, 
+  TrackParams 
+} from 'autumn-js';
+
+const config: AutumnConfig = {
+  publicKey: process.env.AUTUMN_PUBLIC_KEY!,
+  customerId: 'user_123',
+};
+
+const autumn = new Autumn(config);
+```
+
+## Configuration Options
+
+When initializing the client, you can pass these options:
+
+```typescript
+const autumn = new Autumn({
+  publicKey: 'your_public_key',
+  customerId: 'user_123',
+  baseUrl: 'https://api.useautumn.com/v1', // Optional: Custom API endpoint
+  timeout: 5000, // Optional: Request timeout in ms (default: 10000)
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="React SDK" icon="react" href="/sdks/react">
+  Learn how to use Autumn with React hooks
+</Card>
+
+<Card title="REST API" icon="terminal" href="/sdks/rest-api">
+  Use the REST API directly without an SDK
+</Card>
+
+<Card title="Usage-Based Billing" icon="chart-line" href="/guides/usage-based-billing">
+  Set up metered billing with track()
+</Card>
+
+<Card title="Credit Systems" icon="coins" href="/guides/credit-systems">
+  Build credit-based pricing models
+</Card>
+
+</CardGroup>

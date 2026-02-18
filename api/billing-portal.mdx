@@ -1,0 +1,172 @@
+---
+title: 'Billing Portal'
+description: 'Generate a link to the Stripe billing portal for customer self-service'
+---
+
+## POST /customers/{customer_id}/billing_portal
+
+Generate a link to the Stripe Customer Portal where customers can manage their subscriptions, payment methods, and billing information. This provides a secure, Stripe-hosted interface for customer self-service.
+
+### Path Parameters
+
+<ParamField path="customer_id" type="string" required>
+  The ID of the customer.
+  
+  Example: `"cus_123"`
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="return_url" type="string">
+  URL to redirect to when the back button is clicked in the billing portal.
+  
+  Example: `"https://example.com/account"`
+</ParamField>
+
+### Request Body
+
+<ParamField body="configuration_id" type="string">
+  Stripe billing portal configuration ID. Create configurations in your Stripe dashboard to customize the portal's appearance and available features.
+  
+  Example: `"bpc_1234567890"`
+</ParamField>
+
+<ParamField body="return_url" type="string">
+  URL to redirect to when the back button is clicked in the billing portal. This takes precedence over the query parameter if both are provided.
+  
+  Example: `"https://example.com/account"`
+</ParamField>
+
+### Response
+
+<ResponseField name="customer_id" type="string | null">
+  The ID of the customer.
+  
+  Example: `"cus_123"`
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  URL to the billing portal. Redirect the customer to this URL.
+  
+  Example: `"https://billing.stripe.com/p/session/test_..."`
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.autumn.com/customers/cus_123/billing_portal?return_url=https://example.com/account" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+```bash cURL with Configuration
+curl -X POST "https://api.autumn.com/customers/cus_123/billing_portal" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "configuration_id": "bpc_1234567890",
+    "return_url": "https://example.com/account"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.autumn.com/customers/cus_123/billing_portal', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    return_url: 'https://example.com/account'
+  })
+});
+
+const data = await response.json();
+// Redirect user to billing portal
+window.location.href = data.url;
+```
+
+```python Python
+import requests
+
+response = requests.post(
+  'https://api.autumn.com/customers/cus_123/billing_portal',
+  headers={
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  json={
+    'return_url': 'https://example.com/account'
+  }
+)
+
+data = response.json()
+print(data['url'])  # Redirect user to this URL
+```
+
+```typescript TypeScript
+interface BillingPortalRequest {
+  configuration_id?: string;
+  return_url?: string;
+}
+
+interface BillingPortalResponse {
+  customer_id: string | null;
+  url: string;
+}
+
+const getBillingPortal = async (
+  customerId: string,
+  params?: BillingPortalRequest
+): Promise<BillingPortalResponse> => {
+  const response = await fetch(
+    `https://api.autumn.com/customers/${customerId}/billing_portal`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer YOUR_API_KEY',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(params || {})
+    }
+  );
+  
+  return await response.json();
+};
+
+const result = await getBillingPortal('cus_123', {
+  return_url: 'https://example.com/account'
+});
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "customer_id": "cus_123",
+  "url": "https://billing.stripe.com/p/session/test_YWNjdF8xTnJvbEFMa..."
+}
+```
+
+## What Customers Can Do
+
+The Stripe Customer Portal allows customers to:
+
+- View and download invoices
+- Update payment methods
+- Update billing information
+- Cancel or change subscriptions (if enabled)
+- View subscription history
+
+## Portal Configuration
+
+You can customize the billing portal's appearance and available features in your [Stripe Dashboard](https://dashboard.stripe.com/settings/billing/portal). Create different configurations for different use cases:
+
+- **Default Configuration**: Basic subscription management
+- **Self-Service Configuration**: Allow customers to upgrade, downgrade, or cancel
+- **View-Only Configuration**: Only allow customers to view invoices and update payment methods
+
+Pass the `configuration_id` in your request to use a specific configuration.

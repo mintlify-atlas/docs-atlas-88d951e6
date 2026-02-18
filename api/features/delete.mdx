@@ -1,0 +1,337 @@
+---
+title: 'Delete Feature'
+description: 'Permanently remove a feature from your account'
+---
+
+# Delete Feature
+
+Permanently delete a feature from your Autumn account. This action cannot be undone.
+
+<Warning>
+**Destructive Action:** Deleting a feature will:
+- Remove the feature from all plans that include it
+- Stop all usage tracking for this feature
+- Delete all historical usage data (depending on configuration)
+- Break any integrations that reference this feature ID
+
+Consider archiving the feature instead by updating it with `archived: true`.
+</Warning>
+
+## Endpoint
+
+```
+DELETE /features/{feature_id}
+```
+
+## Path Parameters
+
+<ParamField path="feature_id" type="string" required>
+  The unique identifier of the feature to delete.
+  
+  **Example:** `api_calls`, `team_seats`, `storage_gb`
+</ParamField>
+
+## Response
+
+Returns a success message if the feature was deleted.
+
+<ResponseField name="success" type="boolean">
+  Whether the deletion was successful.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Confirmation message.
+  
+  **Example:** `Feature api_calls has been deleted`
+</ResponseField>
+
+## Examples
+
+### Delete a Feature
+
+**Request:**
+```bash
+curl -X DELETE "https://api.autumn.sh/features/old_feature" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Feature old_feature has been deleted"
+}
+```
+
+### Delete a Boolean Feature
+
+**Request:**
+```bash
+curl -X DELETE "https://api.autumn.sh/features/legacy_support" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Feature legacy_support has been deleted"
+}
+```
+
+## Safety Checks
+
+Before deleting a feature, check if it's in use:
+
+```typescript
+// Get feature deletion info
+const deletionInfo = await fetch(
+  'https://api.autumn.sh/features/api_calls/deletion_info',
+  {
+    headers: { 'Authorization': 'Bearer YOUR_API_KEY' }
+  }
+).then(r => r.json());
+
+if (deletionInfo.plans_affected > 0) {
+  console.warn(`This feature is used in ${deletionInfo.plans_affected} plans`);
+  console.warn('Affected plans:', deletionInfo.plans);
+  
+  // Ask for confirmation before proceeding
+  const confirmed = await confirmDeletion();
+  
+  if (confirmed) {
+    await autumn.features.delete('api_calls');
+  }
+} else {
+  // Safe to delete
+  await autumn.features.delete('api_calls');
+}
+```
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Remove Unused Features">
+    Clean up features that are no longer needed:
+    
+    ```typescript
+    const { list: features } = await autumn.features.list();
+    
+    // Find features not in any plan
+    const unusedFeatures = await Promise.all(
+      features.map(async (feature) => {
+        const info = await autumn.features.getDeletionInfo(feature.id);
+        return info.plans_affected === 0 ? feature.id : null;
+      })
+    );
+    
+    // Delete unused features
+    for (const featureId of unusedFeatures.filter(Boolean)) {
+      console.log(`Deleting unused feature: ${featureId}`);
+      await autumn.features.delete(featureId);
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Migrate to New Feature">
+    Replace an old feature with a new one:
+    
+    ```typescript
+    // 1. Create new feature
+    await autumn.features.create({
+      id: 'api_calls_v2',
+      name: 'API Calls (New)',
+      type: 'single_use',
+      consumable: true,
+      event_names: ['api.v2.request'],
+      display: {
+        singular: 'API call',
+        plural: 'API calls'
+      }
+    });
+    
+    // 2. Update all plans to use new feature
+    await updatePlansToNewFeature('api_calls', 'api_calls_v2');
+    
+    // 3. Delete old feature
+    await autumn.features.delete('api_calls');
+    
+    console.log('Migration complete!');
+    ```
+  </Accordion>
+  
+  <Accordion title="Clean Up Test Features">
+    Remove features created during development:
+    
+    ```typescript
+    const { list: features } = await autumn.features.list();
+    
+    // Find test features
+    const testFeatures = features.filter(f => 
+      f.id.startsWith('test_') || f.name.includes('[TEST]')
+    );
+    
+    // Delete them
+    for (const feature of testFeatures) {
+      console.log(`Deleting test feature: ${feature.id}`);
+      await autumn.features.delete(feature.id);
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Bulk Delete by Type">
+    Remove all features of a specific type:
+    
+    ```typescript
+    const { list: features } = await autumn.features.list();
+    
+    // Find all boolean features
+    const booleanFeatures = features.filter(f => f.type === 'boolean');
+    
+    console.log(`Found ${booleanFeatures.length} boolean features`);
+    
+    // Confirm before deletion
+    const confirmed = await confirm(
+      `Delete ${booleanFeatures.length} boolean features?`
+    );
+    
+    if (confirmed) {
+      for (const feature of booleanFeatures) {
+        await autumn.features.delete(feature.id);
+      }
+      console.log('All boolean features deleted');
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Alternative: Archive Instead of Delete
+
+In most cases, archiving is safer than deleting:
+
+```typescript
+// Instead of deleting
+await autumn.features.delete('old_feature');
+
+// Consider archiving
+await autumn.features.update('old_feature', {
+  archived: true
+});
+```
+
+**Benefits of archiving:**
+- Reversible (just set `archived: false`)
+- Preserves historical data
+- Doesn't break existing plans
+- Hidden from UI but still functional
+
+**When to delete:**
+- Feature was created by mistake
+- Feature contains sensitive/incorrect data
+- Feature ID is needed for a new feature
+- Cleaning up test/development features
+
+## Error Handling
+
+### Feature Not Found
+
+```json
+{
+  "message": "Feature with id api_calls not found",
+  "code": "feature_not_found"
+}
+```
+
+### Feature In Use
+
+Some implementations may prevent deletion of features in active plans:
+
+```json
+{
+  "message": "Cannot delete feature that is in use by active plans",
+  "code": "feature_in_use",
+  "plans_affected": 3,
+  "plans": ["pro-plan", "enterprise-plan", "trial-plan"]
+}
+```
+
+## Response Codes
+
+- `200` - Feature deleted successfully
+- `401` - Unauthorized (invalid API key)
+- `404` - Feature not found
+- `409` - Feature cannot be deleted (in use by active plans)
+
+## Important Notes
+
+<Warning>
+**Before Deleting a Feature:**
+
+1. ✅ Check if it's used in any plans (use deletion_info endpoint)
+2. ✅ Export usage data if needed for records
+3. ✅ Update any hardcoded feature IDs in your code
+4. ✅ Consider archiving instead of deleting
+5. ✅ Test in development environment first
+</Warning>
+
+<Tip>
+**Best Practices:**
+
+- Use descriptive feature IDs to avoid conflicts
+- Archive deprecated features instead of deleting
+- Implement soft deletes in your application logic
+- Keep a backup of feature configurations
+- Document why features were deleted
+</Tip>
+
+## Deletion Workflow
+
+Recommended workflow for safely deleting a feature:
+
+```typescript
+// Step 1: Get deletion info
+const info = await autumn.features.getDeletionInfo('api_calls');
+
+console.log(`Plans affected: ${info.plans_affected}`);
+console.log(`Customers affected: ${info.customers_affected}`);
+
+// Step 2: Notify affected customers (if any)
+if (info.customers_affected > 0) {
+  await notifyCustomers(info.affected_customers, {
+    message: 'Feature api_calls will be removed',
+    migration: 'Please upgrade to api_calls_v2'
+  });
+}
+
+// Step 3: Update plans to remove feature
+for (const planId of info.plans) {
+  await autumn.plans.update(planId, {
+    // Remove the feature or replace with alternative
+  });
+}
+
+// Step 4: Wait for grace period (optional)
+await sleep(7 * 24 * 60 * 60 * 1000); // 7 days
+
+// Step 5: Delete the feature
+await autumn.features.delete('api_calls');
+
+console.log('Feature deleted successfully');
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Feature" icon="plus" href="/api/features/create">
+    Add a new feature
+  </Card>
+  <Card title="Update Feature" icon="pen" href="/api/features/update">
+    Archive a feature instead of deleting
+  </Card>
+  <Card title="List Features" icon="list" href="/api/features/list">
+    View all your features
+  </Card>
+  <Card title="Feature Concepts" icon="book" href="/concepts/features">
+    Learn about feature types
+  </Card>
+</CardGroup>

@@ -1,0 +1,679 @@
+---
+title: Features
+description: Learn about features, usage tracking, and metering in Autumn
+---
+
+# Features
+
+Features represent the capabilities and resources that customers can access in your application. Autumn tracks feature usage, enforces limits, and enables sophisticated billing models.
+
+## What is a Feature?
+
+A feature is any measurable capability in your application:
+- API calls or requests
+- Storage or bandwidth
+- Compute credits or AI tokens
+- Team members or workspaces
+- Boolean flags (access/no access)
+
+<Info>
+Think of features as the "building blocks" of your plans. Plans grant access to features, and Autumn tracks how customers use them.
+</Info>
+
+## Feature Schema
+
+From `source/shared/models/featureModels/featureModels.ts:5`, here's the feature structure:
+
+```typescript
+{
+  // Identity
+  id: string,              // Unique identifier (e.g., "api_calls")
+  name: string,            // Display name (e.g., "API Calls")
+  
+  // Type & config
+  type: "boolean" | "metered" | "credit_system",
+  config: object,          // Type-specific configuration
+  
+  // Display
+  display: {
+    singular: string?,     // e.g., "API call"
+    plural: string?        // e.g., "API calls"
+  }?,
+  
+  // Tracking
+  event_names: string[],   // Event names to track for this feature
+  
+  // Internal
+  internal_id: string,
+  org_id: string,
+  env: "development" | "production",
+  created_at: number,
+  archived: boolean
+}
+```
+
+## Feature Types
+
+Autumn supports three feature types, defined in `source/shared/models/featureModels/featureEnums.ts:1`:
+
+### Boolean Features
+
+<Accordion title="Boolean (Access Control)">
+  Simple on/off features that control access to capabilities.
+  
+  ```json
+  {
+    "id": "priority_support",
+    "name": "Priority Support",
+    "type": "boolean",
+    "config": {},
+    "display": {
+      "singular": "Priority Support",
+      "plural": "Priority Support"
+    }
+  }
+  ```
+  
+  **Use cases**:
+  - Feature flags (e.g., "Advanced Analytics")
+  - Access control (e.g., "API Access")
+  - Premium capabilities (e.g., "White Label")
+  
+  <Tip>
+  Boolean features don't track usage. They're either enabled or disabled based on the customer's plan.
+  </Tip>
+</Accordion>
+
+### Metered Features
+
+<Accordion title="Metered (Usage Tracking)">
+  Features that track consumption and enforce limits.
+  
+  From `source/shared/models/featureModels/featureConfig/meteredConfig.ts:26`:
+  
+  ```json
+  {
+    "id": "api_calls",
+    "name": "API Calls",
+    "type": "metered",
+    "event_names": ["api.request"],
+    "config": {
+      "filters": [
+        {
+          "property": "endpoint",
+          "operator": "equals",
+          "value": ["/api/v1/users"]
+        }
+      ],
+      "aggregate": {
+        "type": "sum",
+        "property": null  // Count events
+      },
+      "usage_type": "single_use"  // or "continuous_use"
+    },
+    "display": {
+      "singular": "API call",
+      "plural": "API calls"
+    }
+  }
+  ```
+  
+  **Configuration fields**:
+  - `filters`: Filter which events count toward usage
+  - `aggregate.type`: How to aggregate (currently only "sum")
+  - `aggregate.property`: Property to sum (null = count events)
+  - `usage_type`: `single_use` or `continuous_use`
+  
+  **Use cases**:
+  - API requests or calls
+  - Storage or bandwidth (GB)
+  - AI tokens or credits
+  - Email sends
+  - Any countable resource
+</Accordion>
+
+### Credit System Features
+
+<Accordion title="Credit System (Shared Credits)">
+  A universal credit pool that multiple features can draw from.
+  
+  From `source/shared/models/featureModels/featureConfig/creditConfig.ts:10`:
+  
+  ```json
+  {
+    "id": "credits",
+    "name": "Credits",
+    "type": "credit_system",
+    "config": {
+      "schema": [
+        {
+          "metered_feature_id": "api_calls",
+          "credit_amount": 1  // 1 API call = 1 credit
+        },
+        {
+          "metered_feature_id": "image_generation",
+          "credit_amount": 10  // 1 image = 10 credits
+        },
+        {
+          "metered_feature_id": "video_render",
+          "credit_amount": 100  // 1 video = 100 credits
+        }
+      ],
+      "usage_type": "single_use"
+    }
+  }
+  ```
+  
+  **How it works**:
+  1. Customer purchases credits (e.g., 1000 credits)
+  2. Different features consume credits at different rates
+  3. Autumn deducts credits automatically when features are used
+  
+  **Use cases**:
+  - AI platforms (GPT-4 vs GPT-3.5 use different credit amounts)
+  - Multi-product platforms (different services cost different amounts)
+  - Flexible pricing (customers choose how to spend credits)
+  
+  <Note>
+  Credit systems require metered features to exist first. The credit feature references other features and defines their credit costs.
+  </Note>
+</Accordion>
+
+## Usage Types
+
+From `source/shared/models/featureModels/featureEnums.ts:11`, metered and credit features have a usage type:
+
+<Accordion title="single_use">
+  Usage is counted once per event.
+  
+  **Example**: API calls
+  - Track event: "api.request"
+  - Count: 1 per request
+  - Customer makes 100 requests = 100 usage
+  
+  ```typescript
+  await autumn.track({
+    featureId: "api_calls",
+    value: 1  // Each call is 1 usage
+  });
+  ```
+</Accordion>
+
+<Accordion title="continuous_use">
+  Usage accumulates over time (current value, not incremental).
+  
+  **Example**: Storage
+  - Track event: "storage.update"
+  - Value: Current storage in GB
+  - Customer uploads file, storage = 5.2 GB
+  
+  ```typescript
+  await autumn.track({
+    featureId: "storage_gb",
+    value: 5.2  // Current total storage
+  });
+  ```
+  
+  <Tip>
+  For continuous usage, Autumn uses the latest value, not the sum. This is perfect for gauges like storage, active users, or concurrent connections.
+  </Tip>
+</Accordion>
+
+## Event Names
+
+The `event_names` array specifies which events should count toward feature usage:
+
+```json
+{
+  "id": "api_calls",
+  "event_names": ["api.request", "api.call"],
+  "config": {
+    "aggregate": { "type": "sum", "property": null }
+  }
+}
+```
+
+When you call `autumn.track()` with these event names, usage is recorded:
+
+```typescript
+// This counts toward "api_calls" feature
+await autumn.track({
+  featureId: "api_calls",
+  customerId: "user_123",
+  value: 1
+});
+```
+
+## Filters and Aggregation
+
+Metered features support filtering and aggregation:
+
+### Filtering Events
+
+```json
+{
+  "id": "premium_api_calls",
+  "type": "metered",
+  "event_names": ["api.request"],
+  "config": {
+    "filters": [
+      {
+        "property": "tier",
+        "operator": "equals",
+        "value": ["premium"]
+      },
+      {
+        "property": "region",
+        "operator": "in",
+        "value": ["us-east", "eu-west"]
+      }
+    ]
+  }
+}
+```
+
+<Info>
+Filters allow you to create separate features for different types of usage. For example, track "US API calls" vs "EU API calls" separately.
+</Info>
+
+### Aggregating Values
+
+```json
+// Count events
+{
+  "aggregate": {
+    "type": "sum",
+    "property": null
+  }
+}
+
+// Sum a property value
+{
+  "aggregate": {
+    "type": "sum",
+    "property": "tokens_used"
+  }
+}
+```
+
+When tracking with a property:
+
+```typescript
+await autumn.track({
+  featureId: "ai_tokens",
+  value: 1,
+  metadata: {
+    tokens_used: 1523  // This gets summed
+  }
+});
+```
+
+## Display Configuration
+
+The `display` object customizes how feature usage appears:
+
+```json
+{
+  "id": "api_calls",
+  "display": {
+    "singular": "API call",
+    "plural": "API calls"
+  }
+}
+```
+
+Used in UI:
+- "You have 1 **API call** remaining" (singular)
+- "You have 500 **API calls** remaining" (plural)
+
+<Tip>
+Good display names improve the customer experience. Use clear, descriptive names that customers understand.
+</Tip>
+
+## Feature in Plans
+
+Features are attached to plans via plan items. From the [Plans](/concepts/plans) page:
+
+```json
+{
+  "id": "pro-plan",
+  "items": [
+    {
+      "feature_id": "api_calls",
+      "included": 10000,        // 10k calls included
+      "unlimited": false,
+      "reset": {
+        "interval": "month"      // Reset monthly
+      }
+    },
+    {
+      "feature_id": "priority_support",
+      "included": 1,            // Boolean: just needs > 0
+      "unlimited": false
+    }
+  ]
+}
+```
+
+## Checking Feature Access
+
+Use the `/check` endpoint to verify feature access:
+
+```typescript
+// Check if customer has access
+const { data } = await autumn.check({
+  customerId: "user_123",
+  featureId: "api_calls"
+});
+
+if (!data.allowed) {
+  throw new Error("API limit reached");
+}
+
+console.log(data.usage);     // Current usage
+console.log(data.limit);     // Total limit
+console.log(data.remaining); // Remaining usage
+```
+
+### Check Response
+
+```typescript
+{
+  allowed: boolean,          // Can customer use this feature?
+  usage: number,            // Current usage this period
+  limit: number | null,     // Total limit (null = unlimited)
+  remaining: number | null, // Remaining usage (null = unlimited)
+  reset_at: number | null,  // When usage resets (unix timestamp)
+  
+  // Overage info (if usage-based pricing)
+  overage: {
+    enabled: boolean,
+    cost_per_unit: number
+  }?
+}
+```
+
+## Tracking Usage
+
+Record usage with the `/track` endpoint:
+
+```typescript
+// Track a single unit
+await autumn.track({
+  customerId: "user_123",
+  featureId: "api_calls",
+  value: 1
+});
+
+// Track multiple units
+await autumn.track({
+  customerId: "user_123",
+  featureId: "storage_gb",
+  value: 5.2  // 5.2 GB
+});
+
+// Track with metadata
+await autumn.track({
+  customerId: "user_123",
+  featureId: "ai_tokens",
+  value: 1,
+  metadata: {
+    tokens_used: 1523,
+    model: "gpt-4",
+    endpoint: "/api/chat"
+  }
+});
+```
+
+<Tip>
+Call `track()` **after** the operation succeeds, not before. This ensures you only charge for successful usage.
+</Tip>
+
+## Real-world Examples
+
+### API Rate Limiting
+
+```typescript
+// Define feature
+const apiCallsFeature = {
+  id: "api_calls",
+  name: "API Calls",
+  type: "metered",
+  event_names: ["api.request"],
+  config: {
+    filters: [],
+    aggregate: { type: "sum", property: null },
+    usage_type: "single_use"
+  },
+  display: {
+    singular: "API call",
+    plural: "API calls"
+  }
+};
+
+// In your API handler
+async function handleRequest(req, res) {
+  const customerId = req.user.id;
+  
+  // Check limit BEFORE processing
+  const { data } = await autumn.check({
+    customerId,
+    featureId: "api_calls"
+  });
+  
+  if (!data.allowed) {
+    return res.status(429).json({
+      error: "Rate limit exceeded",
+      reset_at: data.reset_at
+    });
+  }
+  
+  // Process request
+  const result = await processRequest(req);
+  
+  // Track usage AFTER success
+  await autumn.track({
+    customerId,
+    featureId: "api_calls",
+    value: 1
+  });
+  
+  return res.json(result);
+}
+```
+
+### Storage Quota
+
+```typescript
+// Define feature
+const storageFeature = {
+  id: "storage_gb",
+  name: "Storage",
+  type: "metered",
+  event_names: ["storage.update"],
+  config: {
+    filters: [],
+    aggregate: { type: "sum", property: null },
+    usage_type: "continuous_use"  // Current value, not sum
+  },
+  display: {
+    singular: "GB",
+    plural: "GB"
+  }
+};
+
+// When storage changes
+async function updateStorage(userId: string) {
+  // Calculate current total storage
+  const totalGB = await calculateUserStorage(userId);
+  
+  // Track current value
+  await autumn.track({
+    customerId: userId,
+    featureId: "storage_gb",
+    value: totalGB
+  });
+  
+  // Check if over limit
+  const { data } = await autumn.check({
+    customerId: userId,
+    featureId: "storage_gb"
+  });
+  
+  if (!data.allowed) {
+    // Show upgrade prompt
+    showUpgradeModal({
+      current: totalGB,
+      limit: data.limit
+    });
+  }
+}
+```
+
+### AI Credits System
+
+```typescript
+// Define credit feature
+const creditsFeature = {
+  id: "ai_credits",
+  name: "AI Credits",
+  type: "credit_system",
+  config: {
+    schema: [
+      { metered_feature_id: "gpt4_requests", credit_amount: 10 },
+      { metered_feature_id: "gpt35_requests", credit_amount: 2 },
+      { metered_feature_id: "image_generation", credit_amount: 5 }
+    ],
+    usage_type: "single_use"
+  }
+};
+
+// Define metered features
+const gpt4Feature = {
+  id: "gpt4_requests",
+  name: "GPT-4 Requests",
+  type: "metered",
+  event_names: ["ai.request"],
+  config: {
+    filters: [
+      { property: "model", operator: "equals", value: ["gpt-4"] }
+    ],
+    aggregate: { type: "sum", property: null },
+    usage_type: "single_use"
+  }
+};
+
+// In your AI handler
+async function generateAI(userId: string, model: string) {
+  const featureId = model === "gpt-4" ? "gpt4_requests" : "gpt35_requests";
+  
+  // Check credits
+  const { data } = await autumn.check({
+    customerId: userId,
+    featureId
+  });
+  
+  if (!data.allowed) {
+    throw new Error("Insufficient credits");
+  }
+  
+  // Generate
+  const result = await callOpenAI(model, prompt);
+  
+  // Track usage (automatically deducts credits)
+  await autumn.track({
+    customerId: userId,
+    featureId,
+    value: 1,
+    metadata: { model, prompt_tokens: result.usage.prompt_tokens }
+  });
+  
+  return result;
+}
+```
+
+### Team Seats
+
+```typescript
+// Define feature
+const seatsFeature = {
+  id: "team_seats",
+  name: "Team Seats",
+  type: "metered",
+  event_names: ["team.member_added"],
+  config: {
+    filters: [],
+    aggregate: { type: "sum", property: null },
+    usage_type: "continuous_use"  // Current count
+  },
+  display: {
+    singular: "seat",
+    plural: "seats"
+  }
+};
+
+// When adding team member
+async function addTeamMember(teamId: string, email: string) {
+  const currentSeats = await countTeamMembers(teamId);
+  const newSeats = currentSeats + 1;
+  
+  // Check if seats available
+  const { data } = await autumn.check({
+    customerId: teamId,
+    featureId: "team_seats"
+  });
+  
+  if (newSeats > data.limit) {
+    throw new Error("Seat limit reached");
+  }
+  
+  // Add member
+  await addMemberToTeam(teamId, email);
+  
+  // Track new seat count
+  await autumn.track({
+    customerId: teamId,
+    featureId: "team_seats",
+    value: newSeats
+  });
+}
+```
+
+## Best Practices
+
+<Tip>
+**Check before track**: Always call `check()` before the operation to enforce limits. Track usage after success.
+</Tip>
+
+<Tip>
+**Use descriptive IDs**: Feature IDs like `api_calls` are better than `feature_1`. They make your code self-documenting.
+</Tip>
+
+<Tip>
+**Set display names**: Good singular/plural forms improve customer-facing UI and error messages.
+</Tip>
+
+<Note>
+**Single vs Continuous**: Use `single_use` for countable events (API calls, emails sent). Use `continuous_use` for current values (storage, active users).
+</Note>
+
+<Tip>
+**Add metadata**: Include useful context in tracking calls. This helps with debugging and analytics.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Plans" icon="layer-group" href="/concepts/plans">
+    Learn how features are included in plans
+  </Card>
+  <Card title="Check API" icon="check" href="/api/check">
+    Check feature access and limits
+  </Card>
+  <Card title="Track API" icon="chart-line" href="/api/track">
+    Record feature usage
+  </Card>
+  <Card title="Pricing Models" icon="dollar-sign" href="/concepts/pricing-models">
+    Explore usage-based pricing
+  </Card>
+</CardGroup>

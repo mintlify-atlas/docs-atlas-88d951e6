@@ -1,0 +1,395 @@
+---
+title: 'List Features'
+description: 'Retrieve all features in your account'
+---
+
+# List Features
+
+Retrieve a list of all features in your Autumn account. By default, archived features are excluded from the results.
+
+## Endpoint
+
+```
+GET /features
+```
+
+## Query Parameters
+
+No query parameters required. The endpoint returns all active (non-archived) features.
+
+<Note>
+Archived features are automatically excluded from the list. To view archived features, use the Get Feature endpoint with a specific feature ID.
+</Note>
+
+## Response
+
+Returns an object containing a list of feature objects.
+
+<ResponseField name="list" type="array">
+  Array of feature objects.
+  
+  <Expandable title="Feature Object">
+    <ResponseField name="id" type="string">
+      The unique identifier of the feature.
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      The human-readable name of the feature.
+    </ResponseField>
+    
+    <ResponseField name="type" type="enum">
+      The feature type: `boolean`, `single_use`, `continuous_use`, or `credit_system`.
+    </ResponseField>
+    
+    <ResponseField name="consumable" type="boolean">
+      Whether the feature is consumable.
+    </ResponseField>
+    
+    <ResponseField name="display" type="object">
+      Display names for the feature.
+      
+      <Expandable title="Display Object">
+        <ResponseField name="singular" type="string">
+          Singular display name.
+        </ResponseField>
+        
+        <ResponseField name="plural" type="string">
+          Plural display name.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="event_names" type="array">
+      Event names that trigger usage tracking.
+    </ResponseField>
+    
+    <ResponseField name="credit_schema" type="array">
+      Credit cost mapping (only for credit_system features).
+      
+      <Expandable title="Credit Schema">
+        <ResponseField name="metered_feature_id" type="string">
+          The metered feature ID.
+        </ResponseField>
+        
+        <ResponseField name="credit_cost" type="number">
+          The credit cost per unit.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="archived" type="boolean">
+      Whether the feature is archived.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### List All Features
+
+**Request:**
+```bash
+curl -X GET "https://api.autumn.sh/features" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Response:**
+```json
+{
+  "list": [
+    {
+      "id": "api_calls",
+      "name": "API Calls",
+      "type": "single_use",
+      "consumable": true,
+      "event_names": ["api.request"],
+      "display": {
+        "singular": "API call",
+        "plural": "API calls"
+      },
+      "archived": false
+    },
+    {
+      "id": "team_seats",
+      "name": "Team Seats",
+      "type": "continuous_use",
+      "consumable": false,
+      "event_names": ["team.member_added"],
+      "display": {
+        "singular": "seat",
+        "plural": "seats"
+      },
+      "archived": false
+    },
+    {
+      "id": "priority_support",
+      "name": "Priority Support",
+      "type": "boolean",
+      "consumable": false,
+      "display": {
+        "singular": "Priority Support",
+        "plural": "Priority Support"
+      },
+      "archived": false
+    },
+    {
+      "id": "ai_credits",
+      "name": "AI Credits",
+      "type": "credit_system",
+      "consumable": true,
+      "credit_schema": [
+        {
+          "metered_feature_id": "gpt4_requests",
+          "credit_cost": 10
+        },
+        {
+          "metered_feature_id": "gpt35_requests",
+          "credit_cost": 2
+        },
+        {
+          "metered_feature_id": "image_generation",
+          "credit_cost": 5
+        }
+      ],
+      "display": {
+        "singular": "credit",
+        "plural": "credits"
+      },
+      "archived": false
+    }
+  ]
+}
+```
+
+### Response with Different Feature Types
+
+```json
+{
+  "list": [
+    {
+      "id": "premium_access",
+      "name": "Premium Access",
+      "type": "boolean",
+      "consumable": false,
+      "archived": false
+    },
+    {
+      "id": "storage_gb",
+      "name": "Storage",
+      "type": "continuous_use",
+      "consumable": false,
+      "event_names": ["storage.update"],
+      "display": {
+        "singular": "GB",
+        "plural": "GB"
+      },
+      "archived": false
+    },
+    {
+      "id": "email_sends",
+      "name": "Email Sends",
+      "type": "single_use",
+      "consumable": true,
+      "event_names": ["email.sent"],
+      "display": {
+        "singular": "email",
+        "plural": "emails"
+      },
+      "archived": false
+    }
+  ]
+}
+```
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Display Features in Dashboard">
+    Use the list to show all available features in your admin dashboard:
+    
+    ```typescript
+    const { list: features } = await autumn.features.list();
+    
+    features.forEach(feature => {
+      console.log(`${feature.name} (${feature.type})`);
+      
+      if (feature.type === 'credit_system') {
+        console.log('Credit costs:');
+        feature.credit_schema.forEach(item => {
+          console.log(`  - ${item.metered_feature_id}: ${item.credit_cost}`);
+        });
+      }
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Build Plan Creation UI">
+    Show available features when creating a new plan:
+    
+    ```typescript
+    const { list: features } = await autumn.features.list();
+    
+    // Filter by type for different plan tiers
+    const meteredFeatures = features.filter(
+      f => f.type === 'single_use' || f.type === 'continuous_use'
+    );
+    
+    const booleanFeatures = features.filter(
+      f => f.type === 'boolean'
+    );
+    
+    // Show in UI
+    renderFeatureSelector({
+      metered: meteredFeatures,
+      flags: booleanFeatures
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Generate Feature Documentation">
+    Automatically generate documentation from your features:
+    
+    ```typescript
+    const { list: features } = await autumn.features.list();
+    
+    const docs = features.map(feature => ({
+      name: feature.name,
+      id: feature.id,
+      type: feature.type,
+      description: `Track ${feature.display.plural} usage`,
+      consumable: feature.consumable
+    }));
+    
+    // Generate markdown documentation
+    exportToMarkdown(docs);
+    ```
+  </Accordion>
+  
+  <Accordion title="Sync Features to External System">
+    Keep your external billing system in sync:
+    
+    ```typescript
+    const { list: features } = await autumn.features.list();
+    
+    // Sync to Stripe products
+    for (const feature of features) {
+      await stripe.products.createOrUpdate({
+        id: feature.id,
+        name: feature.name,
+        metadata: {
+          type: feature.type,
+          consumable: feature.consumable
+        }
+      });
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Validate Credit System">
+    Check that all metered features referenced in credit schemas exist:
+    
+    ```typescript
+    const { list: features } = await autumn.features.list();
+    
+    // Get all metered feature IDs
+    const meteredIds = new Set(
+      features
+        .filter(f => f.type === 'single_use')
+        .map(f => f.id)
+    );
+    
+    // Check credit systems
+    const creditSystems = features.filter(f => f.type === 'credit_system');
+    
+    creditSystems.forEach(system => {
+      system.credit_schema.forEach(item => {
+        if (!meteredIds.has(item.metered_feature_id)) {
+          console.warn(
+            `Credit system ${system.id} references missing feature: ${item.metered_feature_id}`
+          );
+        }
+      });
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Filtering and Grouping
+
+The API returns all features in a flat list. You can filter and group them client-side:
+
+### By Type
+
+```typescript
+const { list: features } = await autumn.features.list();
+
+const grouped = {
+  boolean: features.filter(f => f.type === 'boolean'),
+  single_use: features.filter(f => f.type === 'single_use'),
+  continuous_use: features.filter(f => f.type === 'continuous_use'),
+  credit_system: features.filter(f => f.type === 'credit_system')
+};
+```
+
+### By Consumable
+
+```typescript
+const { list: features } = await autumn.features.list();
+
+const consumable = features.filter(f => f.consumable);
+const allocated = features.filter(f => !f.consumable);
+```
+
+### Alphabetically
+
+```typescript
+const { list: features } = await autumn.features.list();
+
+const sorted = features.sort((a, b) => 
+  a.name.localeCompare(b.name)
+);
+```
+
+## Response Codes
+
+- `200` - Features retrieved successfully
+- `401` - Unauthorized (invalid API key)
+
+## Empty Response
+
+If no features exist or all are archived:
+
+```json
+{
+  "list": []
+}
+```
+
+## Performance Notes
+
+<Info>
+The list endpoint returns all active features in a single request. For most applications, this is efficient because:
+
+- Features are typically small in number (10-50)
+- The response is cacheable
+- No pagination overhead
+
+If you have hundreds of features, consider caching the response and refreshing periodically.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Create Feature" icon="plus" href="/api/features/create">
+    Add a new feature
+  </Card>
+  <Card title="Get Feature" icon="eye" href="/api/features/get">
+    View specific feature details
+  </Card>
+  <Card title="Update Feature" icon="pen" href="/api/features/update">
+    Modify a feature
+  </Card>
+  <Card title="Feature Concepts" icon="book" href="/concepts/features">
+    Learn about feature types
+  </Card>
+</CardGroup>

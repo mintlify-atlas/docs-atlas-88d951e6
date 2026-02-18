@@ -1,0 +1,312 @@
+---
+title: 'Delete Product'
+description: 'Remove a product from your catalog'
+---
+
+## Overview
+
+Delete a product from your catalog. You can delete a specific version or all versions of a product. Deleting a product does not affect existing customer subscriptions.
+
+<Warning>
+  Deleting a product is permanent and cannot be undone. Customers with active subscriptions to this product will retain access, but new customers cannot attach it.
+</Warning>
+
+<Note>
+  Consider archiving products instead of deleting them. Archived products remain in your system for historical reference while being hidden from new customers.
+</Note>
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://api.useautumn.com/products/pro-plan \
+  -H "Authorization: Bearer YOUR_SECRET_KEY"
+```
+
+```bash cURL (All Versions)
+curl -X DELETE "https://api.useautumn.com/products/pro-plan?all_versions=true" \
+  -H "Authorization: Bearer YOUR_SECRET_KEY"
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'YOUR_SECRET_KEY'
+});
+
+// Delete latest version
+await autumn.products.delete('pro-plan');
+
+// Delete all versions
+await autumn.products.delete('pro-plan', { all_versions: true });
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'YOUR_SECRET_KEY'
+});
+
+// Delete latest version
+await autumn.products.delete('pro-plan');
+
+// Delete all versions
+await autumn.products.delete('pro-plan', { all_versions: true });
+```
+</CodeGroup>
+
+## Path Parameters
+
+<ParamField path="product_id" type="string" required>
+  The unique identifier of the product to delete.
+  
+  Example: `pro-plan`, `enterprise-tier`
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="all_versions" type="boolean" default={false}>
+  If `true`, deletes all versions of the product. If `false`, only deletes the latest version.
+  
+  <Warning>
+    Deleting all versions removes the product completely from your catalog, including all historical data.
+  </Warning>
+</ParamField>
+
+## Response
+
+<ResponseField name="success" type="boolean">
+  Indicates whether the deletion was successful.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  A confirmation message describing what was deleted.
+  
+  Examples:
+  - `"Product 'pro-plan' (version 2) deleted successfully"`
+  - `"Product 'pro-plan' (all versions) deleted successfully"`
+</ResponseField>
+
+## Response Example
+
+```json
+{
+  "success": true,
+  "message": "Product 'pro-plan' (version 2) deleted successfully"
+}
+```
+
+## Use Cases
+
+### Delete a Specific Version
+
+Remove only the latest version while keeping previous versions:
+
+```javascript
+await autumn.products.delete('pro-plan');
+```
+
+This is useful when:
+- You created a version by mistake
+- You want to roll back to a previous version
+- You're testing new pricing configurations
+
+### Delete All Versions
+
+Completely remove a product from your catalog:
+
+```javascript
+await autumn.products.delete('pro-plan', { all_versions: true });
+```
+
+Use this when:
+- Discontinuing a product line
+- Cleaning up test products
+- Removing deprecated offerings
+
+### Safe Deletion Pattern
+
+Check for active customers before deleting:
+
+```javascript
+// First, check if any customers are on this product
+const { list: customers } = await autumn.customers.list();
+const activeCustomers = customers.filter(c => 
+  c.products?.some(p => p.id === 'pro-plan')
+);
+
+if (activeCustomers.length > 0) {
+  console.log(`Warning: ${activeCustomers.length} customers are on this product`);
+  console.log('Consider archiving instead of deleting');
+  
+  // Archive the product instead
+  await autumn.products.update('pro-plan', { archived: true });
+} else {
+  // Safe to delete
+  await autumn.products.delete('pro-plan', { all_versions: true });
+}
+```
+
+### Batch Delete Test Products
+
+Remove multiple test products:
+
+```javascript
+const { list: products } = await autumn.products.list();
+
+// Find test products (assuming they have a naming convention)
+const testProducts = products.filter(p => 
+  p.id.startsWith('test-') || 
+  p.name.includes('Test')
+);
+
+// Delete each test product
+for (const product of testProducts) {
+  try {
+    await autumn.products.delete(product.id, { all_versions: true });
+    console.log(`Deleted test product: ${product.name}`);
+  } catch (error) {
+    console.error(`Failed to delete ${product.name}:`, error);
+  }
+}
+```
+
+### Migration: Delete After Replacing
+
+Replace an old product with a new one:
+
+```javascript
+// Create the new product
+const newProduct = await autumn.products.create({
+  id: 'pro-plan-v2',
+  name: 'Pro Plan (New)',
+  items: [
+    { price: 39, interval: 'month' }
+  ]
+});
+
+// Migrate existing customers
+const { list: customers } = await autumn.customers.list();
+const oldPlanCustomers = customers.filter(c =>
+  c.products?.some(p => p.id === 'pro-plan')
+);
+
+for (const customer of oldPlanCustomers) {
+  await autumn.migrate({
+    customer_id: customer.id,
+    from_product_id: 'pro-plan',
+    to_product_id: 'pro-plan-v2'
+  });
+}
+
+// After successful migration, archive the old product
+await autumn.products.update('pro-plan', { archived: true });
+
+// Or delete it completely
+// await autumn.products.delete('pro-plan', { all_versions: true });
+```
+
+## Best Practices
+
+### Archive Instead of Delete
+
+In most cases, archiving is preferable to deletion:
+
+```javascript
+// Archive a product (recommended)
+await autumn.products.update('pro-plan', { archived: true });
+
+// Benefits:
+// - Keeps historical data
+// - Allows reporting and analytics
+// - Maintains customer subscription history
+// - Can be unarchived if needed
+```
+
+### Version Management
+
+Delete specific versions strategically:
+
+```javascript
+// Keep production versions, delete test versions
+const { list: products } = await autumn.products.list();
+const proProduct = products.filter(p => p.id === 'pro-plan');
+
+// If there are multiple versions, delete the latest if it's a test
+if (proProduct.length > 1) {
+  const latestVersion = Math.max(...proProduct.map(p => p.version));
+  console.log(`Deleting version ${latestVersion}, keeping older versions`);
+  await autumn.products.delete('pro-plan'); // Deletes only latest
+}
+```
+
+### Backup Before Deletion
+
+Export product configuration before deleting:
+
+```javascript
+// Get the product data
+const product = await autumn.products.get('pro-plan');
+
+// Save to a file or database for backup
+const backup = JSON.stringify(product, null, 2);
+await fs.writeFile(`backup-${product.id}-${Date.now()}.json`, backup);
+
+// Now safe to delete
+await autumn.products.delete('pro-plan', { all_versions: true });
+```
+
+## Error Handling
+
+Handle common deletion errors:
+
+```javascript
+try {
+  await autumn.products.delete('pro-plan');
+} catch (error) {
+  if (error.code === 'not_found') {
+    console.log('Product not found or already deleted');
+  } else if (error.code === 'forbidden') {
+    console.log('You do not have permission to delete this product');
+  } else if (error.code === 'has_active_customers') {
+    console.log('Cannot delete: product has active customers');
+    console.log('Consider archiving instead');
+  } else {
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+## Impact on Existing Customers
+
+When you delete a product:
+
+- **Active subscriptions continue**: Customers keep their current access
+- **Billing continues**: Existing subscriptions are still billed
+- **Features remain active**: Customers retain all product features
+- **No new attachments**: New customers cannot subscribe to the deleted product
+- **Historical data preserved**: Past transactions and usage remain in records
+
+If you need to remove a product from existing customers, you must:
+
+1. Cancel their subscriptions first using the [Cancel](/api/cancel) endpoint
+2. Then delete the product
+
+```javascript
+// Cancel all subscriptions to a product first
+const { list: customers } = await autumn.customers.list();
+
+for (const customer of customers) {
+  const hasProduct = customer.products?.some(p => p.id === 'pro-plan');
+  
+  if (hasProduct) {
+    await autumn.cancel({
+      customer_id: customer.id,
+      product_id: 'pro-plan'
+    });
+  }
+}
+
+// Now safe to delete the product
+await autumn.products.delete('pro-plan', { all_versions: true });
+```

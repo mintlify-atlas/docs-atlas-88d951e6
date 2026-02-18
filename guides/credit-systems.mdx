@@ -1,0 +1,502 @@
+---
+title: "Credit Systems"
+description: "Implement flexible credit-based billing with shared credit pools"
+---
+
+## Overview
+
+Credit systems allow you to create a shared pool of credits that can be consumed by multiple features with different cost multipliers. This is perfect for:
+
+- AI platforms with different model costs (GPT-4: 10 credits, GPT-3.5: 2 credits)
+- API platforms with tiered endpoints
+- Communication platforms with SMS/voice/email credits
+- Storage platforms with different operation costs
+
+<Tip>
+Think of credits as a universal currency within your product. Each action "purchases" from the credit pool at its own exchange rate.
+</Tip>
+
+## How Credit Systems Work
+
+### Basic Concept
+
+1. You define a **credit system** feature (e.g., "AI Credits")
+2. You define **action features** that consume from the credit system
+3. Each action has a **credit cost** (exchange rate)
+4. When an action is used, credits are deducted based on the cost multiplier
+
+```typescript
+// Example: AI Platform
+Credits: 1000                    // Credit pool
+├─ GPT-4 Generation: 10 credits per generation
+├─ GPT-3.5 Generation: 2 credits per generation
+└─ Image Generation: 5 credits per image
+```
+
+## Setting Up Credit Systems
+
+<Steps>
+  <Step title="Create the credit system feature">
+    Define the central credit pool.
+
+    ```typescript
+    const creditsFeature = {
+      id: "ai_credits",
+      name: "AI Credits",
+      type: "credit_system",
+      usage_type: "consumable",
+      config: {
+        schema: [
+          {
+            metered_feature_id: "gpt4_generations",
+            credit_amount: 10,
+            feature_amount: 1  // 10 credits per 1 generation
+          },
+          {
+            metered_feature_id: "gpt35_generations",
+            credit_amount: 2,
+            feature_amount: 1  // 2 credits per 1 generation
+          },
+          {
+            metered_feature_id: "image_generations",
+            credit_amount: 5,
+            feature_amount: 1  // 5 credits per 1 image
+          }
+        ]
+      }
+    };
+    ```
+  </Step>
+
+  <Step title="Create action features">
+    Define the metered features that consume credits.
+
+    ```typescript
+    const gpt4Feature = {
+      id: "gpt4_generations",
+      name: "GPT-4 Generations",
+      type: "metered",
+      usage_type: "consumable"
+    };
+
+    const gpt35Feature = {
+      id: "gpt35_generations",
+      name: "GPT-3.5 Generations",
+      type: "metered",
+      usage_type: "consumable"
+    };
+    ```
+  </Step>
+
+  <Step title="Add credits to a product">
+    Include the credit system in your product.
+
+    ```typescript
+    const product = {
+      id: "pro-plan",
+      items: [{
+        feature_id: "ai_credits",
+        included_usage: 1000,  // 1000 credits included
+        reset: {
+          interval: "month"
+        }
+      }]
+    };
+    ```
+  </Step>
+
+  <Step title="Track usage on actions">
+    When users consume actions, credits are automatically deducted.
+
+    ```typescript
+    // User generates with GPT-4
+    await autumn.track({
+      customer_id: "customer_123",
+      feature_id: "gpt4_generations",
+      value: 1  // Consumes 10 credits (1 * 10)
+    });
+
+    // User generates with GPT-3.5
+    await autumn.track({
+      customer_id: "customer_123",
+      feature_id: "gpt35_generations",
+      value: 1  // Consumes 2 credits (1 * 2)
+    });
+    ```
+  </Step>
+</Steps>
+
+## Checking Credit Balances
+
+### Check Actions, Not Credits
+
+<Warning>
+**Important**: Always check the **action** feature, not the credit system itself. The response will include the credit system balance.
+</Warning>
+
+```typescript
+// ❌ Wrong: Don't check credits directly
+const wrong = await autumn.check({
+  customer_id: "customer_123",
+  feature_id: "ai_credits"  // Don't do this!
+});
+
+// ✅ Correct: Check the action
+const correct = await autumn.check({
+  customer_id: "customer_123",
+  feature_id: "gpt4_generations",
+  required_balance: 5  // Check if user can do 5 GPT-4 generations
+});
+
+console.log(correct);
+// {
+//   allowed: true,
+//   feature_id: "ai_credits",  // Returns credit system info
+//   balance: 1000,              // Credit balance
+//   required_balance: 50,       // 5 * 10 = 50 credits needed
+//   usage: 0
+// }
+```
+
+## Credit Cost Calculation
+
+### Understanding Credit Costs
+
+The credit cost formula is:
+
+```
+credit_cost = (action_value * credit_amount) / feature_amount
+```
+
+**Examples:**
+
+```typescript
+// GPT-4: credit_amount=10, feature_amount=1
+// 1 generation = 1 * (10/1) = 10 credits
+// 5 generations = 5 * (10/1) = 50 credits
+
+// GPT-3.5: credit_amount=2, feature_amount=1  
+// 1 generation = 1 * (2/1) = 2 credits
+// 10 generations = 10 * (2/1) = 20 credits
+```
+
+### Bulk Pricing with Feature Amount
+
+Use `feature_amount` for bulk pricing:
+
+```typescript
+{
+  metered_feature_id: "api_calls",
+  credit_amount: 10,
+  feature_amount: 100  // 10 credits per 100 API calls
+}
+
+// 100 calls = 10 credits
+// 250 calls = 25 credits (250 * 10/100)
+```
+
+## Deduction Order with Direct Balances
+
+When an action has **both** a direct balance AND a credit system fallback:
+
+1. **First**: Deducts from the action's direct balance
+2. **Then**: Falls back to credit system when direct balance is depleted
+
+```typescript
+// Product with both direct balance and credits
+const product = {
+  items: [
+    {
+      feature_id: "gpt4_generations",
+      included_usage: 10  // 10 direct GPT-4 generations
+    },
+    {
+      feature_id: "ai_credits",
+      included_usage: 1000  // 1000 credits as fallback
+    }
+  ]
+};
+
+// Track 5 generations: uses direct balance
+await autumn.track({
+  customer_id: "customer_123",
+  feature_id: "gpt4_generations",
+  value: 5
+});
+// gpt4_generations: 5 remaining (10 - 5)
+// ai_credits: 1000 remaining (untouched)
+
+// Track 7 more generations: uses 5 direct + 2 from credits
+await autumn.track({
+  customer_id: "customer_123",
+  feature_id: "gpt4_generations",
+  value: 7
+});
+// gpt4_generations: 0 remaining (used all 5)
+// ai_credits: 980 remaining (1000 - 20, where 20 = 2 * 10)
+```
+
+## Credit Types
+
+### Monetary Credits
+
+Credits that represent actual currency value:
+
+```typescript
+const monetaryCredits = {
+  id: "dollar_credits",
+  name: "Dollar Credits",
+  type: "credit_system",
+  usage_type: "consumable",
+  config: {
+    schema: [
+      {
+        metered_feature_id: "sms_messages",
+        credit_amount: 10,    // $0.10 per SMS
+        feature_amount: 1
+      },
+      {
+        metered_feature_id: "voice_minutes",
+        credit_amount: 25,    // $0.25 per minute
+        feature_amount: 1
+      }
+    ]
+  }
+};
+
+// $10 = 1000 credits
+const product = {
+  items: [{
+    feature_id: "dollar_credits",
+    included_usage: 1000  // $10 worth
+  }]
+};
+```
+
+### Arbitrary Credits
+
+Abstract credit units for flexible pricing:
+
+```typescript
+const platformCredits = {
+  id: "platform_credits",
+  name: "Platform Credits",
+  type: "credit_system",
+  usage_type: "consumable",
+  config: {
+    schema: [
+      {
+        metered_feature_id: "basic_action",
+        credit_amount: 1,
+        feature_amount: 1
+      },
+      {
+        metered_feature_id: "premium_action",
+        credit_amount: 5,
+        feature_amount: 1
+      },
+      {
+        metered_feature_id: "enterprise_action",
+        credit_amount: 20,
+        feature_amount: 1
+      }
+    ]
+  }
+};
+```
+
+## Top-ups and Prepaid Credits
+
+Allow customers to purchase additional credits:
+
+```typescript
+// Add prepaid credits to the credit system
+const topUpItem = {
+  feature_id: "ai_credits",
+  quantity: 5000,  // 5000 additional credits
+  type: "prepaid"
+};
+
+await autumn.attach({
+  customer_id: "customer_123",
+  product_id: "credit-topup",
+  items: [topUpItem]
+});
+
+// Check new balance
+const check = await autumn.check({
+  customer_id: "customer_123",
+  feature_id: "gpt4_generations"
+});
+
+console.log(check.balance);  // 6000 (1000 included + 5000 purchased)
+```
+
+## Displaying Credit Information
+
+### Show Credit Balance and Costs
+
+```typescript
+const check = await autumn.check({
+  customer_id: "customer_123",
+  feature_id: "gpt4_generations"
+});
+
+const creditsPerGeneration = 10;
+const generationsRemaining = Math.floor(check.balance / creditsPerGeneration);
+
+console.log(`Credits: ${check.balance}`);
+console.log(`GPT-4 generations available: ${generationsRemaining}`);
+
+// Calculate for multiple actions
+const gpt35Check = await autumn.check({
+  customer_id: "customer_123",
+  feature_id: "gpt35_generations"
+});
+
+const gpt35Available = Math.floor(gpt35Check.balance / 2);
+console.log(`GPT-3.5 generations available: ${gpt35Available}`);
+```
+
+### Show Cost Before Actions
+
+```typescript
+function getActionCost(action: string): number {
+  const costs = {
+    gpt4_generations: 10,
+    gpt35_generations: 2,
+    image_generations: 5
+  };
+  return costs[action] || 0;
+}
+
+// Before user clicks "Generate"
+const actionCost = getActionCost(selectedModel);
+console.log(`This will cost ${actionCost} credits`);
+
+const check = await autumn.check({
+  customer_id: customerId,
+  feature_id: selectedModel,
+  required_balance: 1
+});
+
+if (!check.allowed) {
+  showUpgradePrompt(`You need ${actionCost} credits. Current balance: ${check.balance}`);
+}
+```
+
+## Advanced Patterns
+
+### Variable Credit Costs
+
+Adjust costs based on actual consumption:
+
+```typescript
+// Track based on actual tokens used
+const tokensUsed = 1547;
+const creditsPerThousandTokens = 10;
+const creditCost = (tokensUsed / 1000) * creditsPerThousandTokens;
+
+await autumn.track({
+  customer_id: "customer_123",
+  feature_id: "gpt4_tokens",
+  value: tokensUsed / 1000  // Track in thousands
+});
+// Deducts ~15.47 credits
+```
+
+### Multi-Tier Credit Systems
+
+Different credit pools for different feature types:
+
+```typescript
+const product = {
+  items: [
+    {
+      feature_id: "compute_credits",  // For CPU-intensive tasks
+      included_usage: 1000
+    },
+    {
+      feature_id: "storage_credits",  // For storage operations
+      included_usage: 5000
+    },
+    {
+      feature_id: "api_credits",      // For API calls
+      included_usage: 10000
+    }
+  ]
+};
+```
+
+### Credit Gifting
+
+Transfer credits between customers:
+
+```typescript
+// Deduct from sender
+await autumn.track({
+  customer_id: "sender_123",
+  feature_id: "platform_credits",
+  value: 100
+});
+
+// Add to receiver (negative value increases balance)
+await autumn.track({
+  customer_id: "receiver_456",
+  feature_id: "platform_credits",
+  value: -100  // Negative = add to balance
+});
+```
+
+## Best Practices
+
+<Tip>
+**Transparent pricing**: Always show users how many credits each action costs before they use it.
+</Tip>
+
+<Warning>
+**Monitor credit exhaustion**: Set up alerts when customers are running low on credits to prevent churn.
+</Warning>
+
+### Handling Edge Cases
+
+```typescript
+// Prevent partial usage
+const check = await autumn.check({
+  customer_id: customerId,
+  feature_id: "gpt4_generations",
+  required_balance: 1
+});
+
+if (!check.allowed) {
+  // Don't allow action to start if credits insufficient
+  throw new Error(`Insufficient credits. Need 10, have ${check.balance}`);
+}
+
+// Perform expensive operation
+const result = await generateWithGPT4();
+
+// Track after success
+await autumn.track({
+  customer_id: customerId,
+  feature_id: "gpt4_generations",
+  value: 1
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Usage-Based Billing" icon="chart-line" href="/guides/usage-based-billing">
+    Learn about track and check endpoints
+  </Card>
+  <Card title="Subscriptions" icon="repeat" href="/guides/subscriptions">
+    Manage subscription lifecycle
+  </Card>
+  <Card title="Seat-Based Pricing" icon="users" href="/guides/seat-based-pricing">
+    Per-entity billing and limits
+  </Card>
+  <Card title="Stripe Integration" icon="stripe" href="/guides/stripe-integration">
+    Configure Stripe for billing
+  </Card>
+</CardGroup>

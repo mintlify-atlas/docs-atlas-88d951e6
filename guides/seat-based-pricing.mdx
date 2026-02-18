@@ -1,0 +1,573 @@
+---
+title: "Seat-Based Pricing"
+description: "Implement per-seat billing and entity-scoped limits"
+---
+
+## Overview
+
+Seat-based pricing (also called entity-based pricing) allows you to charge per user, workspace, project, or any other entity within a customer's account. Autumn supports two distinct patterns:
+
+1. **Entity Products**: Each entity has its own product subscription
+2. **Per-Entity Features**: A single product with per-entity usage limits
+
+<Tip>
+Think of entities as sub-accounts within a customer. Common examples: team members, workspaces, projects, or any resource that should have independent billing or limits.
+</Tip>
+
+## Entity Patterns
+
+### Pattern 1: Entity Products
+
+Each entity gets its own product attachment and subscription:
+
+```typescript
+// Customer has multiple entities (workspaces)
+// Each workspace has its own Pro plan subscription
+
+// Workspace 1: Pro Plan ($20/month)
+// Workspace 2: Pro Plan ($20/month)  
+// Workspace 3: Free Plan ($0/month)
+// Total: $40/month
+```
+
+**Use this when:**
+- Each entity needs different plan tiers
+- Billing happens per entity
+- Entities have independent billing cycles
+
+### Pattern 2: Per-Entity Features
+
+One customer-level product with per-entity usage allocation:
+
+```typescript
+// Customer has Pro Plan with per-seat features
+// Base: $20/month + $5/seat
+
+// 5 team members created
+// Each member gets: 1000 messages, 100 API calls
+// Total: $20 + (5 * $5) = $45/month
+```
+
+**Use this when:**
+- All entities get the same features
+- Billing is per-entity count
+- Usage is tracked separately per entity
+
+## Implementing Entity Products
+
+<Steps>
+  <Step title="Define the entity feature">
+    Create a feature that represents the entity type.
+
+    ```typescript
+    const workspacesFeature = {
+      id: "workspaces",
+      name: "Workspaces",
+      type: "metered",
+      usage_type: "licensed"  // Each workspace is a seat
+    };
+    ```
+  </Step>
+
+  <Step title="Create entities for the customer">
+    Add entities to represent each seat/workspace/member.
+
+    ```typescript
+    await autumn.entities.create("customer_123", [
+      {
+        id: "workspace_1",
+        name: "Marketing Team",
+        feature_id: "workspaces"
+      },
+      {
+        id: "workspace_2",
+        name: "Sales Team",
+        feature_id: "workspaces"
+      }
+    ]);
+    ```
+  </Step>
+
+  <Step title="Attach products to entities">
+    Subscribe each entity to a product.
+
+    ```typescript
+    // Attach Pro to workspace_1
+    await autumn.attach({
+      customer_id: "customer_123",
+      entity_id: "workspace_1",
+      plan_id: "pro-monthly"
+    });
+
+    // Attach Free to workspace_2
+    await autumn.attach({
+      customer_id: "customer_123",
+      entity_id: "workspace_2",
+      plan_id: "free-plan"
+    });
+    ```
+  </Step>
+
+  <Step title="Track usage per entity">
+    Usage is scoped to each entity's balance.
+
+    ```typescript
+    // Track usage for workspace_1
+    await autumn.track({
+      customer_id: "customer_123",
+      entity_id: "workspace_1",
+      feature_id: "api_calls",
+      value: 10
+    });
+    // Only deducts from workspace_1's balance
+    ```
+  </Step>
+</Steps>
+
+### Entity Product Example
+
+```typescript
+// Create products
+const proPlan = {
+  id: "pro-workspace",
+  name: "Pro Workspace",
+  price: 20,
+  items: [
+    { feature_id: "api_calls", included_usage: 10000 },
+    { feature_id: "storage_gb", included_usage: 100 }
+  ]
+};
+
+const freePlan = {
+  id: "free-workspace",
+  name: "Free Workspace",
+  price: 0,
+  items: [
+    { feature_id: "api_calls", included_usage: 1000 },
+    { feature_id: "storage_gb", included_usage: 10 }
+  ]
+};
+
+// Setup customer with 3 workspaces
+const workspaces = [
+  { id: "ws_1", name: "Workspace 1" },
+  { id: "ws_2", name: "Workspace 2" },
+  { id: "ws_3", name: "Workspace 3" }
+];
+
+await autumn.entities.create("customer_123", 
+  workspaces.map(ws => ({ ...ws, feature_id: "workspaces" }))
+);
+
+// Different plans per workspace
+await autumn.attach({
+  customer_id: "customer_123",
+  entity_id: "ws_1",
+  plan_id: "pro-workspace"  // $20/month
+});
+
+await autumn.attach({
+  customer_id: "customer_123",
+  entity_id: "ws_2",
+  plan_id: "pro-workspace"  // $20/month
+});
+
+await autumn.attach({
+  customer_id: "customer_123",
+  entity_id: "ws_3",
+  plan_id: "free-workspace"  // $0/month
+});
+
+// Total monthly cost: $40
+```
+
+## Implementing Per-Entity Features
+
+<Steps>
+  <Step title="Define entity feature">
+    Create a feature representing the entity type (seats).
+
+    ```typescript
+    const teamMembersFeature = {
+      id: "team_members",
+      name: "Team Members",
+      type: "metered",
+      usage_type: "licensed"
+    };
+    ```
+  </Step>
+
+  <Step title="Create product with per-entity items">
+    Use `entity_feature_id` to allocate usage per entity.
+
+    ```typescript
+    const product = {
+      id: "team-plan",
+      name: "Team Plan",
+      base_price: 20,  // Base price
+      items: [
+        {
+          feature_id: "api_calls",
+          included_usage: 5000,
+          entity_feature_id: "team_members",  // Per-member allocation
+          // Each member gets 5000 API calls
+        },
+        {
+          feature_id: "team_members",
+          price: 5,  // $5 per member
+          type: "licensed"
+        }
+      ]
+    };
+    ```
+  </Step>
+
+  <Step title="Attach product to customer (not entities)">
+    The product is attached at customer level.
+
+    ```typescript
+    await autumn.attach({
+      customer_id: "customer_123",
+      plan_id: "team-plan"
+      // No entity_id - this is customer-level
+    });
+    ```
+  </Step>
+
+  <Step title="Create entities (seats)">
+    Each entity automatically gets its allocated balance.
+
+    ```typescript
+    await autumn.entities.create("customer_123", [
+      { id: "member_1", name: "Alice", feature_id: "team_members" },
+      { id: "member_2", name: "Bob", feature_id: "team_members" },
+      { id: "member_3", name: "Charlie", feature_id: "team_members" }
+    ]);
+    // Each member automatically gets 5000 API calls
+    // Customer is charged: $20 + (3 * $5) = $35/month
+    ```
+  </Step>
+
+  <Step title="Track usage per entity">
+    Usage is scoped to each entity's allocated balance.
+
+    ```typescript
+    // Alice uses 100 API calls
+    await autumn.track({
+      customer_id: "customer_123",
+      entity_id: "member_1",
+      feature_id: "api_calls",
+      value: 100
+    });
+    // Alice has 4900 remaining, Bob and Charlie still have 5000
+    ```
+  </Step>
+</Steps>
+
+### Per-Entity Feature Example
+
+```typescript
+const teamPlan = {
+  id: "team-plan",
+  name: "Team Plan",
+  items: [
+    // Base features (customer-level)
+    {
+      feature_id: "projects",
+      included_usage: 10
+    },
+    // Per-member pricing
+    {
+      feature_id: "team_members",
+      type: "licensed",
+      price: 10  // $10 per member
+    },
+    // Per-member usage allocation
+    {
+      feature_id: "api_calls",
+      included_usage: 1000,
+      entity_feature_id: "team_members"
+      // Each member gets 1000 calls
+    },
+    {
+      feature_id: "storage_gb",
+      included_usage: 50,
+      entity_feature_id: "team_members"
+      // Each member gets 50 GB
+    }
+  ]
+};
+
+// Attach to customer
+await autumn.attach({
+  customer_id: "customer_123",
+  plan_id: "team-plan"
+});
+
+// Add 5 team members
+await autumn.entities.create("customer_123", [
+  { id: "alice", name: "Alice", feature_id: "team_members" },
+  { id: "bob", name: "Bob", feature_id: "team_members" },
+  { id: "charlie", name: "Charlie", feature_id: "team_members" },
+  { id: "diana", name: "Diana", feature_id: "team_members" },
+  { id: "evan", name: "Evan", feature_id: "team_members" }
+]);
+
+// Monthly cost: $0 base + (5 * $10) = $50
+// Each member has: 1000 API calls, 50 GB storage
+```
+
+## Balance Inheritance
+
+Entities inherit balances from customer-level products:
+
+```typescript
+// Customer-level product
+const customerProduct = {
+  items: [{ feature_id: "api_calls", included_usage: 5000 }]
+};
+
+// Entity-level product  
+const entityProduct = {
+  items: [{ feature_id: "api_calls", included_usage: 1000 }]
+};
+
+await autumn.attach({
+  customer_id: "customer_123",
+  plan_id: "customer-product"
+});
+
+await autumn.attach({
+  customer_id: "customer_123",
+  entity_id: "workspace_1",
+  plan_id: "entity-product"
+});
+
+// Balances:
+// Customer: 5000 (own) + 1000 (entity) = 6000 total
+// workspace_1: 1000 (own) + 5000 (inherited) = 6000 total
+```
+
+## Managing Entities
+
+### Creating Entities
+
+```typescript
+const entities = await autumn.entities.create("customer_123", [
+  {
+    id: "seat_001",
+    name: "Alice Johnson",
+    feature_id: "team_members",
+    metadata: {
+      email: "alice@example.com",
+      role: "admin"
+    }
+  }
+]);
+```
+
+### Fetching Entity Data
+
+```typescript
+// Get specific entity
+const entity = await autumn.entities.get({
+  customer_id: "customer_123",
+  entity_id: "seat_001"
+});
+
+console.log(entity);
+// {
+//   id: "seat_001",
+//   name: "Alice Johnson",
+//   feature_id: "team_members",
+//   features: {
+//     api_calls: { balance: 1000, usage: 0 }
+//   },
+//   products: [...]
+// }
+```
+
+### Deleting Entities
+
+```typescript
+// Remove entity (cancels entity products)
+await autumn.entities.delete("customer_123", "seat_001");
+
+// If using per-entity features, this:
+// - Removes the entity
+// - Reduces seat count
+// - Credits unused prepaid time on next invoice
+```
+
+## Seat Count Changes
+
+### Adding Seats
+
+```typescript
+// Create new entity = add seat
+await autumn.entities.create("customer_123", [
+  { id: "new_member", name: "Frank", feature_id: "team_members" }
+]);
+
+// For per-entity features:
+// - New member gets allocated usage
+// - Prorated charge for remainder of billing period
+// - Next invoice includes full seat price
+```
+
+### Removing Seats
+
+```typescript
+// Delete entity = remove seat  
+await autumn.entities.delete("customer_123", "member_to_remove");
+
+// For per-entity features:
+// - Member's usage stops
+// - Prorated credit on next invoice
+// - Seat count decreases
+```
+
+### Tracking Seat Changes
+
+```typescript
+// Add seat (negative value = increase balance)
+await autumn.track({
+  customer_id: "customer_123",
+  feature_id: "team_members",
+  value: -1  // Negative = add
+});
+
+// Remove seat (positive value = decrease balance)
+await autumn.track({
+  customer_id: "customer_123",
+  feature_id: "team_members",
+  value: 1  // Positive = remove
+});
+```
+
+## Per-Entity Overages
+
+For per-entity consumable features with overages:
+
+```typescript
+const product = {
+  items: [
+    {
+      feature_id: "api_calls",
+      included_usage: 1000,
+      entity_feature_id: "team_members",
+      overage_price: 0.01,  // $0.01 per extra call
+      overage_allowed: true
+    }
+  ]
+};
+
+// Member 1 uses 1500 calls (500 overage)
+// Member 2 uses 1200 calls (200 overage)
+// Member 3 uses 800 calls (0 overage)
+
+// Total overage: 500 + 200 = 700
+// Overage charge: 700 * $0.01 = $7
+// Total charge: base + seats + overage
+```
+
+<Warning>
+**Important**: Overage is calculated by summing ALL entity overages first, then applying the price. Not calculated per-entity then summed.
+</Warning>
+
+## Entity Upgrade/Downgrade Flows
+
+### Upgrading Entity Products
+
+```typescript
+// Workspace on Free plan
+await autumn.attach({
+  customer_id: "customer_123",
+  entity_id: "workspace_1",
+  plan_id: "free-plan"
+});
+
+// Upgrade to Pro (immediate)
+await autumn.attach({
+  customer_id: "customer_123",
+  entity_id: "workspace_1",
+  plan_id: "pro-plan"
+});
+// Workspace immediately gets Pro features
+// Prorated charge for remainder of cycle
+```
+
+### Downgrading Entity Products
+
+```typescript
+// Workspace on Pro plan
+// Downgrade to Free (scheduled)
+await autumn.attach({
+  customer_id: "customer_123",
+  entity_id: "workspace_1",
+  plan_id: "free-plan"
+});
+// Pro remains active until period end
+// Free plan activates next cycle
+```
+
+## Best Practices
+
+<Tip>
+**Choose the right pattern**: Use entity products for flexible per-entity billing, use per-entity features for uniform seat pricing.
+</Tip>
+
+<Warning>
+**Don't mix patterns**: Decide on entity products OR per-entity features for each use case. Mixing can cause confusion in billing.
+</Warning>
+
+### Displaying Seat Usage
+
+```typescript
+const customer = await autumn.customers.get("customer_123");
+const entities = await autumn.entities.list("customer_123");
+
+console.log(`Seats: ${entities.length}`);
+for (const entity of entities) {
+  const usage = entity.features?.api_calls;
+  if (usage) {
+    const percent = (usage.usage / usage.included_usage) * 100;
+    console.log(`${entity.name}: ${percent.toFixed(0)}% used`);
+  }
+}
+```
+
+### Seat Limits
+
+```typescript
+// Check seat limit before adding
+const customer = await autumn.customers.get("customer_123");
+const entities = await autumn.entities.list("customer_123");
+const maxSeats = customer.features?.team_members?.included_usage || 0;
+
+if (entities.length >= maxSeats) {
+  throw new Error("Seat limit reached. Please upgrade your plan.");
+}
+
+// Create new seat
+await autumn.entities.create("customer_123", [
+  { id: newId, name: newName, feature_id: "team_members" }
+]);
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Subscriptions" icon="repeat" href="/guides/subscriptions">
+    Manage subscription lifecycle
+  </Card>
+  <Card title="Usage-Based Billing" icon="chart-line" href="/guides/usage-based-billing">
+    Track per-entity usage
+  </Card>
+  <Card title="Webhooks" icon="webhook" href="/guides/webhooks">
+    React to entity changes
+  </Card>
+  <Card title="Stripe Integration" icon="stripe" href="/guides/stripe-integration">
+    Configure Stripe billing
+  </Card>
+</CardGroup>

@@ -1,0 +1,402 @@
+---
+title: 'Update Feature'
+description: 'Update an existing feature configuration'
+---
+
+# Update Feature
+
+Update the configuration of an existing feature. You can modify most properties except the feature ID and type.
+
+<Warning>
+Updating a feature affects all plans that include it. Be careful when modifying features in production.
+</Warning>
+
+## Endpoint
+
+```
+POST /features/{feature_id}
+```
+
+## Path Parameters
+
+<ParamField path="feature_id" type="string" required>
+  The unique identifier of the feature to update.
+  
+  **Example:** `api_calls`, `team_seats`, `storage_gb`
+</ParamField>
+
+## Request Body
+
+All fields are optional. Only include the fields you want to update.
+
+<ParamField body="name" type="string">
+  Update the human-readable name of the feature.
+  
+  **Example:** `Premium API Calls`
+</ParamField>
+
+<ParamField body="type" type="enum">
+  The feature type. Note: Changing types may break existing configurations.
+  
+  **Options:**
+  - `boolean`
+  - `single_use`
+  - `continuous_use`
+  - `credit_system`
+</ParamField>
+
+<ParamField body="display" type="object">
+  Update display names for the feature.
+  
+  <Expandable title="Display Object">
+    <ParamField body="display.singular" type="string">
+      Singular form of the feature name.
+    </ParamField>
+    
+    <ParamField body="display.plural" type="string">
+      Plural form of the feature name.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="event_names" type="array">
+  Update the event names that trigger usage tracking.
+  
+  **Example:** `["api.request", "api.v2.call"]`
+</ParamField>
+
+<ParamField body="credit_schema" type="array">
+  Update the credit cost schema for credit system features.
+  
+  <Expandable title="Credit Schema Array">
+    <ParamField body="credit_schema[].metered_feature_id" type="string" required>
+      The ID of a metered feature.
+    </ParamField>
+    
+    <ParamField body="credit_schema[].credit_cost" type="number" required>
+      The credit cost per unit.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="archived" type="boolean">
+  Archive or unarchive the feature.
+  
+  - `true` - Feature is hidden from dashboard and list endpoints
+  - `false` - Feature is active and visible
+  
+  <Note>
+  Archived features are still functional but hidden from the UI. This is useful for deprecating features without breaking existing plans.
+  </Note>
+</ParamField>
+
+## Response
+
+Returns the updated feature object.
+
+<ResponseField name="id" type="string">
+  The unique identifier of the feature.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The updated name of the feature.
+</ResponseField>
+
+<ResponseField name="type" type="enum">
+  The feature type.
+</ResponseField>
+
+<ResponseField name="consumable" type="boolean">
+  Whether the feature is consumable.
+</ResponseField>
+
+<ResponseField name="display" type="object">
+  Updated display names.
+  
+  <Expandable title="Display Object">
+    <ResponseField name="singular" type="string">
+      Singular display name.
+    </ResponseField>
+    
+    <ResponseField name="plural" type="string">
+      Plural display name.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="event_names" type="array">
+  Updated event names.
+</ResponseField>
+
+<ResponseField name="credit_schema" type="array">
+  Updated credit cost mapping.
+  
+  <Expandable title="Credit Schema">
+    <ResponseField name="metered_feature_id" type="string">
+      The metered feature ID.
+    </ResponseField>
+    
+    <ResponseField name="credit_cost" type="number">
+      The credit cost per unit.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="archived" type="boolean">
+  Whether the feature is archived.
+</ResponseField>
+
+## Examples
+
+### Update Feature Name and Display
+
+**Request:**
+```bash
+curl -X POST "https://api.autumn.sh/features/api_calls" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Premium API Calls",
+    "display": {
+      "singular": "premium API call",
+      "plural": "premium API calls"
+    }
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": "api_calls",
+  "name": "Premium API Calls",
+  "type": "single_use",
+  "consumable": true,
+  "event_names": ["api.request"],
+  "display": {
+    "singular": "premium API call",
+    "plural": "premium API calls"
+  },
+  "archived": false
+}
+```
+
+### Update Event Names
+
+**Request:**
+```bash
+curl -X POST "https://api.autumn.sh/features/api_calls" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_names": ["api.request", "api.v2.call", "api.graphql"]
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": "api_calls",
+  "name": "API Calls",
+  "type": "single_use",
+  "consumable": true,
+  "event_names": ["api.request", "api.v2.call", "api.graphql"],
+  "display": {
+    "singular": "API call",
+    "plural": "API calls"
+  },
+  "archived": false
+}
+```
+
+### Update Credit Schema
+
+Modify credit costs for a credit system feature:
+
+**Request:**
+```bash
+curl -X POST "https://api.autumn.sh/features/ai_credits" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "credit_schema": [
+      {
+        "metered_feature_id": "gpt4_requests",
+        "credit_cost": 15
+      },
+      {
+        "metered_feature_id": "gpt35_requests",
+        "credit_cost": 3
+      },
+      {
+        "metered_feature_id": "image_generation",
+        "credit_cost": 8
+      },
+      {
+        "metered_feature_id": "video_generation",
+        "credit_cost": 50
+      }
+    ]
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": "ai_credits",
+  "name": "AI Credits",
+  "type": "credit_system",
+  "consumable": true,
+  "credit_schema": [
+    {
+      "metered_feature_id": "gpt4_requests",
+      "credit_cost": 15
+    },
+    {
+      "metered_feature_id": "gpt35_requests",
+      "credit_cost": 3
+    },
+    {
+      "metered_feature_id": "image_generation",
+      "credit_cost": 8
+    },
+    {
+      "metered_feature_id": "video_generation",
+      "credit_cost": 50
+    }
+  ],
+  "display": {
+    "singular": "credit",
+    "plural": "credits"
+  },
+  "archived": false
+}
+```
+
+### Archive a Feature
+
+Archive a feature to hide it from the UI while keeping it functional:
+
+**Request:**
+```bash
+curl -X POST "https://api.autumn.sh/features/legacy_feature" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "archived": true
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": "legacy_feature",
+  "name": "Legacy Feature",
+  "type": "boolean",
+  "consumable": false,
+  "archived": true
+}
+```
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Adjust Credit Costs">
+    Update credit costs based on your pricing strategy:
+    
+    ```typescript
+    // Increase GPT-4 cost, decrease GPT-3.5 cost
+    await autumn.features.update('ai_credits', {
+      credit_schema: [
+        { metered_feature_id: 'gpt4_requests', credit_cost: 15 }, // was 10
+        { metered_feature_id: 'gpt35_requests', credit_cost: 1 }  // was 2
+      ]
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Improve Display Names">
+    Update display names to be more user-friendly:
+    
+    ```typescript
+    await autumn.features.update('storage_gb', {
+      display: {
+        singular: 'GB of storage',
+        plural: 'GB of storage'
+      }
+    });
+    
+    // Now shows: "You have 15 GB of storage remaining"
+    ```
+  </Accordion>
+  
+  <Accordion title="Deprecate Features">
+    Archive old features while keeping them functional:
+    
+    ```typescript
+    // Archive old feature
+    await autumn.features.update('old_api_v1', {
+      archived: true
+    });
+    
+    // Existing customers can still use it
+    // But new plans won't see it in the dashboard
+    ```
+  </Accordion>
+  
+  <Accordion title="Add New Event Tracking">
+    Expand event tracking for existing features:
+    
+    ```typescript
+    // Add new API endpoints to track
+    await autumn.features.update('api_calls', {
+      event_names: [
+        'api.request',
+        'api.v2.call',
+        'api.graphql',  // New GraphQL endpoint
+        'api.webhook'   // New webhook endpoint
+      ]
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Important Notes
+
+<Warning>
+**Breaking Changes:**
+- Changing the feature type may break existing plan configurations
+- Removing features from credit_schema affects all credit calculations
+- Changing event_names affects how usage is tracked going forward
+</Warning>
+
+<Tip>
+**Best Practices:**
+- Test changes in development environment before production
+- Use archiving instead of deletion for deprecated features
+- Document why and when you change credit costs
+- Notify customers before making pricing-related changes
+</Tip>
+
+## Response Codes
+
+- `200` - Feature updated successfully
+- `400` - Invalid request (validation error)
+- `401` - Unauthorized (invalid API key)
+- `404` - Feature not found
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Get Feature" icon="eye" href="/api/features/get">
+    View current feature configuration
+  </Card>
+  <Card title="List Features" icon="list" href="/api/features/list">
+    See all your features
+  </Card>
+  <Card title="Delete Feature" icon="trash" href="/api/features/delete">
+    Remove a feature permanently
+  </Card>
+  <Card title="Feature Concepts" icon="book" href="/concepts/features">
+    Learn more about feature types
+  </Card>
+</CardGroup>

@@ -1,0 +1,489 @@
+---
+title: "Self-Hosting Guide"
+description: "Deploy Autumn on your own infrastructure with full control"
+---
+
+## Overview
+
+Autumn can be self-hosted on your own infrastructure, giving you complete control over your billing data and deployment environment. This guide walks you through the installation process and configuration options.
+
+<Note>
+  **Prefer cloud hosting?** Use our [hosted service](https://app.useautumn.com) to get started instantly without managing infrastructure.
+</Note>
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- **Node.js** (v18 or higher)
+- **Bun** runtime installed ([bun.sh](https://bun.sh))
+- **PostgreSQL** database (v14 or higher)
+- **Docker** and **Docker Compose**
+- **Stripe account** for payment processing
+
+<Tip>
+  Autumn's setup script can automatically provision a Supabase PostgreSQL database for you if you don't have one.
+</Tip>
+
+## Installation
+
+<Steps>
+  <Step title="Fork and clone the repository">
+    Fork the Autumn repository on GitHub, then clone it locally:
+
+    ```bash
+    git clone https://github.com/YOUR-USERNAME/autumn.git
+    cd autumn
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Use Bun to install all required packages:
+
+    ```bash
+    bun install
+    ```
+
+    This installs dependencies for all workspaces (server, client, shared packages).
+  </Step>
+
+  <Step title="Run the setup script">
+    The setup script initializes environment variables and optionally provisions a Supabase database:
+
+    ```bash
+    bun setup
+    ```
+
+    The script will:
+    - Generate encryption keys for Stripe API key storage
+    - Create a localtunnel reserved key for Stripe webhooks in development
+    - Optionally spin up a Supabase PostgreSQL instance
+    - Initialize required environment variables in `server/.env`
+
+    <Warning>
+      If you're running `bun setup` again after previously running it, you may need to drop your database tables first to avoid a known issue. See [Troubleshooting](#troubleshooting) for details.
+    </Warning>
+  </Step>
+
+  <Step title="Generate database tables">
+    Create the required database schema:
+
+    ```bash
+    bun db:generate && bun db:migrate
+    ```
+
+    This uses Drizzle ORM to:
+    - Generate migration files based on the schema
+    - Apply migrations to your PostgreSQL database
+  </Step>
+
+  <Step title="Start the development environment">
+    Launch Autumn using Docker Compose:
+
+    <Tabs>
+      <Tab title="Windows">
+        ```bash
+        docker compose -f docker-compose.dev.yml up
+        ```
+      </Tab>
+
+      <Tab title="macOS / Linux">
+        ```bash
+        docker compose -f docker-compose.unix.yml up
+        ```
+      </Tab>
+    </Tabs>
+
+    Autumn will start on:
+    - **Dashboard**: `http://localhost:3000`
+    - **API Server**: `http://localhost:8080`
+  </Step>
+
+  <Step title="Access the dashboard">
+    Navigate to `http://localhost:3000` in your browser.
+
+    To log in:
+    - Enter your email at the sign-in page
+    - An OTP (One-Time Password) will appear in your console/terminal
+    - Enter the OTP to complete authentication
+
+    <Note>
+      By default, Autumn uses console-based OTP for development. In production, configure [Resend](#email-authentication) or [Google OAuth](#google-oauth) for proper authentication.
+    </Note>
+  </Step>
+</Steps>
+
+## Environment variables
+
+Autumn uses environment variables to configure various services. The setup script initializes most of these, but you may need to customize them.
+
+### Required variables
+
+These variables are essential for Autumn to function:
+
+```bash server/.env
+# Authentication
+BETTER_AUTH_SECRET=your_generated_secret
+BETTER_AUTH_URL=http://localhost:8080
+CLIENT_URL=http://localhost:3000
+
+# Stripe encryption
+ENCRYPTION_IV=generated_by_setup_script
+ENCRYPTION_PASSWORD=generated_by_setup_script
+STRIPE_WEBHOOK_URL=https://your-tunnel.loca.lt
+LOCALTUNNEL_RESERVED_KEY=your_reserved_key
+
+# Database
+DATABASE_URL=postgresql://user:password@host:5432/database
+```
+
+<AccordionGroup>
+  <Accordion title="BETTER_AUTH_SECRET" icon="key">
+    Secret key for the Better Auth authentication provider. Generated automatically by the setup script.
+  </Accordion>
+
+  <Accordion title="ENCRYPTION_IV & ENCRYPTION_PASSWORD" icon="lock">
+    Used for AES-256 encryption of Stripe API keys in the database. Generated automatically by the setup script.
+  </Accordion>
+
+  <Accordion title="STRIPE_WEBHOOK_URL" icon="webhook">
+    Base URL where Stripe webhooks will be sent. In development, this uses localtunnel. In production, use your domain.
+  </Accordion>
+
+  <Accordion title="DATABASE_URL" icon="database">
+    PostgreSQL connection string. You can:
+    - Let the setup script provision a Supabase instance
+    - Use your own PostgreSQL database
+    - Use any PostgreSQL-compatible service (RDS, Cloud SQL, etc.)
+  </Accordion>
+</AccordionGroup>
+
+### Optional variables
+
+Enhance your Autumn installation with these optional integrations:
+
+<Tabs>
+  <Tab title="Google OAuth">
+    Enable Google Sign-In for your users:
+
+    ```bash server/.env
+    GOOGLE_CLIENT_ID=your_client_id
+    GOOGLE_CLIENT_SECRET=your_client_secret
+    ```
+
+    Get these credentials from the [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
+  </Tab>
+
+  <Tab title="Email (Resend)">
+    Send transactional emails (OTPs, password resets, etc.):
+
+    ```bash server/.env
+    RESEND_API_KEY=your_api_key
+    RESEND_DOMAIN=your_domain
+    ```
+
+    Sign up for a free account at [resend.com](https://resend.com).
+  </Tab>
+
+  <Tab title="Redis">
+    For production deployments, use Redis for caching:
+
+    ```bash server/.env
+    REDIS_URL=redis://localhost:6379
+    # Or use a hosted provider like Upstash:
+    REDIS_URL=rediss://your-upstash-url
+    ```
+  </Tab>
+
+  <Tab title="ClickHouse">
+    Store usage events in ClickHouse for advanced analytics:
+
+    ```bash server/.env
+    CLICKHOUSE_URL=https://your-clickhouse-instance
+    CLICKHOUSE_USERNAME=default
+    CLICKHOUSE_PASSWORD=your_password
+    CLICKHOUSE_SKIP_ENSURES=false
+    ```
+
+    <Note>
+      Set `CLICKHOUSE_SKIP_ENSURES=true` after the first run to skip view/function creation on subsequent starts.
+    </Note>
+  </Tab>
+
+  <Tab title="Webhooks (Svix)">
+    Enable webhook functionality using Svix:
+
+    ```bash server/.env
+    SVIX_API_KEY=your_api_key
+    ```
+
+    Sign up at [svix.com](https://www.svix.com).
+  </Tab>
+
+  <Tab title="Logging (Axiom)">
+    Send logs to Axiom for monitoring:
+
+    ```bash server/.env
+    AXIOM_TOKEN=your_token
+    ```
+
+    Create an account at [axiom.co](https://axiom.co).
+  </Tab>
+
+  <Tab title="AI (Anthropic)">
+    Generate singular/plural names for features:
+
+    ```bash server/.env
+    ANTHROPIC_API_KEY=your_api_key
+    ```
+  </Tab>
+</Tabs>
+
+## Database management
+
+Autumn uses PostgreSQL with Drizzle ORM for database operations.
+
+### Initial setup
+
+For first-time database setup:
+
+```bash
+bun db:push
+```
+
+This creates all required tables without generating migration files.
+
+### Creating migrations
+
+When you need version-controlled migrations:
+
+<Steps>
+  <Step title="Generate migration files">
+    ```bash
+    bun db:generate
+    ```
+    
+    Creates migration files based on schema changes.
+  </Step>
+
+  <Step title="Apply migrations">
+    ```bash
+    bun db:migrate
+    ```
+    
+    Applies pending migrations to your database.
+  </Step>
+</Steps>
+
+### Using your own database
+
+To use your own PostgreSQL instance instead of Supabase:
+
+1. Create a PostgreSQL database
+2. Update `DATABASE_URL` in `server/.env` with your connection string:
+   ```bash
+   DATABASE_URL=postgresql://username:password@hostname:5432/database_name
+   ```
+3. Run `bun db:push` to create tables
+
+<Tip>
+  Any PostgreSQL-compatible database works, including Amazon RDS, Google Cloud SQL, Azure Database, or DigitalOcean Managed Databases.
+</Tip>
+
+## Production deployment
+
+### Environment configuration
+
+For production, update these variables:
+
+```bash server/.env
+# Use your production URLs
+BETTER_AUTH_URL=https://api.yourdomain.com
+CLIENT_URL=https://yourdomain.com
+STRIPE_WEBHOOK_URL=https://api.yourdomain.com
+
+# Use production database
+DATABASE_URL=postgresql://prod_user:secure_password@prod-host:5432/autumn
+
+# Use production Redis (recommended)
+REDIS_URL=rediss://your-production-redis-url
+
+# Configure authentication
+GOOGLE_CLIENT_ID=your_prod_client_id
+GOOGLE_CLIENT_SECRET=your_prod_client_secret
+RESEND_API_KEY=your_prod_api_key
+```
+
+### Docker deployment
+
+Build and run the production containers:
+
+```bash
+# Build production images
+docker compose -f docker-compose.prod.yml build
+
+# Start in production mode
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Webhook configuration
+
+In production, Stripe needs to send webhooks to your server:
+
+1. Configure your domain to point to your server
+2. Update `STRIPE_WEBHOOK_URL` to your domain
+3. Stripe will automatically register webhooks when you connect your Stripe account
+
+<Warning>
+  Ensure your server is accessible from the internet and uses HTTPS for webhook delivery.
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="SyntaxError: Unexpected end of JSON input" icon="bug">
+    This error occurs when running `bun setup` multiple times with an existing database.
+
+    **Solution:**
+    1. Connect to your database
+    2. Drop all existing tables
+    3. Run `bun setup` again
+
+    This is a [known issue](https://github.com/drizzle-team/drizzle-orm/issues/4529) with Drizzle ORM.
+  </Accordion>
+
+  <Accordion title="Database connection failed" icon="database">
+    If you can't connect to the database:
+    
+    - Verify `DATABASE_URL` is correct
+    - Check that PostgreSQL is running
+    - Ensure the database exists
+    - Verify network access if using a remote database
+    - Check firewall rules
+  </Accordion>
+
+  <Accordion title="OTP not appearing in console" icon="envelope">
+    If you're not seeing the OTP in your terminal:
+    
+    - Check that you're running the Docker containers in the foreground (without `-d`)
+    - Look for the OTP in the server logs
+    - Configure Resend for email-based OTP delivery
+  </Accordion>
+
+  <Accordion title="Stripe webhooks not working" icon="webhook">
+    If Stripe webhooks aren't being received:
+    
+    **Development:**
+    - Ensure localtunnel is running (part of Docker Compose)
+    - Verify `LOCALTUNNEL_RESERVED_KEY` is set
+    - Check that `STRIPE_WEBHOOK_URL` matches your tunnel URL
+    
+    **Production:**
+    - Verify your domain is accessible from the internet
+    - Ensure you're using HTTPS
+    - Check that port 8080 is accessible
+    - Review webhook logs in the Stripe dashboard
+  </Accordion>
+
+  <Accordion title="Port already in use" icon="exclamation">
+    If ports 3000 or 8080 are already in use:
+    
+    **Find and kill the process:**
+    ```bash
+    # On Unix/Mac
+    lsof -ti:3000 -ti:8080 | xargs kill -9
+    
+    # On Windows
+    netstat -ano | findstr :3000
+    taskkill /PID <PID> /F
+    ```
+    
+    Or modify the ports in your `docker-compose` file.
+  </Accordion>
+
+  <Accordion title="Docker Compose fails to start" icon="docker">
+    If Docker Compose fails:
+    
+    - Ensure Docker daemon is running
+    - Check Docker Compose version (v2+ required)
+    - Review error logs: `docker compose logs`
+    - Try rebuilding: `docker compose build --no-cache`
+  </Accordion>
+</AccordionGroup>
+
+## Updating Autumn
+
+To update your self-hosted instance:
+
+<Steps>
+  <Step title="Pull latest changes">
+    ```bash
+    git fetch upstream
+    git merge upstream/main
+    ```
+  </Step>
+
+  <Step title="Update dependencies">
+    ```bash
+    bun install
+    ```
+  </Step>
+
+  <Step title="Run migrations">
+    ```bash
+    bun db:migrate
+    ```
+  </Step>
+
+  <Step title="Rebuild and restart">
+    ```bash
+    docker compose down
+    docker compose -f docker-compose.unix.yml up --build
+    ```
+  </Step>
+</Steps>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start Guide"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Integrate Autumn into your application
+  </Card>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api/attach"
+  >
+    Explore the complete API documentation
+  </Card>
+  <Card
+    title="Contributing Guide"
+    icon="heart"
+    href="https://github.com/useautumn/autumn/blob/main/.github/CONTRIBUTING.md"
+  >
+    Contribute back to the Autumn project
+  </Card>
+  <Card
+    title="Discord Community"
+    icon="discord"
+    href="https://discord.gg/53emPtY9tA"
+  >
+    Get help and connect with other developers
+  </Card>
+</CardGroup>
+
+## Support
+
+Need help with self-hosting?
+
+- **Discord**: [discord.gg/53emPtY9tA](https://discord.gg/53emPtY9tA)
+- **Email**: hey@useautumn.com
+- **GitHub Issues**: [github.com/useautumn/autumn/issues](https://github.com/useautumn/autumn/issues)
+
+<Note>
+  For enterprise support and custom deployment assistance, contact us at hey@useautumn.com
+</Note>

@@ -1,0 +1,267 @@
+---
+title: 'Create Customer'
+description: 'Create a new customer in your Autumn account'
+api: 'POST /customers'
+---
+
+Create a new customer with optional metadata, email preferences, and Stripe integration. Customers can be automatically enrolled in free plans and associated with Stripe customer records.
+
+## Request Body
+
+<ParamField body="id" type="string" required>
+  Your unique identifier for the customer. Must contain only letters, numbers, underscores, and hyphens. Cannot contain spaces, periods, or @ symbols.
+  
+  ```
+  "customer_12345"
+  ```
+</ParamField>
+
+<ParamField body="name" type="string">
+  Customer's full name.
+  
+  ```
+  "John Doe"
+  ```
+</ParamField>
+
+<ParamField body="email" type="string">
+  Customer's email address. Must be a valid email format.
+  
+  ```
+  "john@example.com"
+  ```
+</ParamField>
+
+<ParamField body="fingerprint" type="string">
+  Unique identifier (e.g., device serial number or hardware ID) to detect duplicate customers and prevent free trial abuse. This helps identify users who may create multiple accounts.
+  
+  ```
+  "device_abc123xyz"
+  ```
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Key-value pairs to store additional custom data about the customer. Useful for storing application-specific information.
+  
+  ```json
+  {
+    "company": "Acme Inc",
+    "plan_tier": "enterprise",
+    "onboarding_completed": true
+  }
+  ```
+</ParamField>
+
+<ParamField body="stripe_id" type="string">
+  Existing Stripe customer ID if you already have a Stripe customer record. Autumn will link to this existing customer instead of creating a new one.
+  
+  ```
+  "cus_NffrFeUfNV2Hib"
+  ```
+</ParamField>
+
+<ParamField body="create_in_stripe" type="boolean" default={false}>
+  Whether to automatically create a corresponding customer record in Stripe. Set to `true` if you want Autumn to handle Stripe customer creation.
+</ParamField>
+
+<ParamField body="auto_enable_plan_id" type="string">
+  The ID of a free plan to automatically enable for this customer upon creation. Useful for automatically enrolling new customers in a trial or free tier.
+  
+  ```
+  "plan_free_tier"
+  ```
+</ParamField>
+
+<ParamField body="send_email_receipts" type="boolean" default={true}>
+  Whether to send email receipts to this customer for transactions and invoices.
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="expand" type="string[]">
+  Array of related resources to include in the response. Reduces the need for additional API calls.
+  
+  Available options:
+  - `invoices` - Include customer's invoices
+  - `entities` - Include associated entities
+  - `trials_used` - Include trial usage history
+  - `rewards` - Include rewards and discounts
+  - `referrals` - Include referral information
+  - `payment_method` - Include payment method details
+  
+  ```
+  ?expand=invoices,payment_method
+  ```
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  Your unique identifier for the customer.
+</ResponseField>
+
+<ResponseField name="name" type="string | null">
+  Customer's name.
+</ResponseField>
+
+<ResponseField name="email" type="string | null">
+  Customer's email address.
+</ResponseField>
+
+<ResponseField name="created_at" type="number">
+  Unix timestamp (in seconds) when the customer was created.
+</ResponseField>
+
+<ResponseField name="fingerprint" type="string | null">
+  Device fingerprint for duplicate detection.
+</ResponseField>
+
+<ResponseField name="stripe_id" type="string | null">
+  Associated Stripe customer ID.
+</ResponseField>
+
+<ResponseField name="env" type="string">
+  Environment where the customer was created (`production` or `development`).
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Custom metadata key-value pairs.
+</ResponseField>
+
+<ResponseField name="send_email_receipts" type="boolean">
+  Whether email receipts are enabled for this customer.
+</ResponseField>
+
+<ResponseField name="subscriptions" type="array">
+  Array of active subscriptions for this customer.
+  <Expandable title="Subscription Object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the subscription.
+    </ResponseField>
+    <ResponseField name="plan_id" type="string">
+      ID of the plan this subscription is for.
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Current status of the subscription (e.g., `active`, `canceled`, `past_due`).
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="scheduled_subscriptions" type="array">
+  Array of subscriptions scheduled to start in the future.
+</ResponseField>
+
+<ResponseField name="balances" type="object">
+  Object mapping feature IDs to their current balance amounts.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.autumn.ai/v1/customers \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "customer_12345",
+    "name": "John Doe",
+    "email": "john@example.com",
+    "metadata": {
+      "company": "Acme Inc",
+      "plan_tier": "enterprise"
+    },
+    "create_in_stripe": true,
+    "send_email_receipts": true
+  }'
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@autumn.ai/sdk';
+
+const autumn = new Autumn({ apiKey: 'YOUR_API_KEY' });
+
+const customer = await autumn.customers.create({
+  id: 'customer_12345',
+  name: 'John Doe',
+  email: 'john@example.com',
+  metadata: {
+    company: 'Acme Inc',
+    plan_tier: 'enterprise'
+  },
+  createInStripe: true,
+  sendEmailReceipts: true
+});
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@autumn.ai/sdk';
+
+const autumn = new Autumn({ apiKey: 'YOUR_API_KEY' });
+
+const customer = await autumn.customers.create({
+  id: 'customer_12345',
+  name: 'John Doe',
+  email: 'john@example.com',
+  metadata: {
+    company: 'Acme Inc',
+    plan_tier: 'enterprise'
+  },
+  createInStripe: true,
+  sendEmailReceipts: true
+});
+```
+
+```python Python SDK
+from autumn import Autumn
+
+autumn = Autumn(api_key="YOUR_API_KEY")
+
+customer = autumn.customers.create(
+    id="customer_12345",
+    name="John Doe",
+    email="john@example.com",
+    metadata={
+        "company": "Acme Inc",
+        "plan_tier": "enterprise"
+    },
+    create_in_stripe=True,
+    send_email_receipts=True
+)
+```
+</CodeGroup>
+
+## Common Use Cases
+
+### Create customer with Stripe integration
+```json
+{
+  "id": "user_123",
+  "name": "Jane Smith",
+  "email": "jane@startup.com",
+  "create_in_stripe": true,
+  "auto_enable_plan_id": "plan_free_trial"
+}
+```
+
+### Create customer with device fingerprint
+```json
+{
+  "id": "user_456",
+  "email": "user@example.com",
+  "fingerprint": "fp_9876543210",
+  "metadata": {
+    "device_type": "desktop",
+    "os": "macOS"
+  }
+}
+```
+
+### Link to existing Stripe customer
+```json
+{
+  "id": "existing_user",
+  "name": "Bob Johnson",
+  "email": "bob@company.com",
+  "stripe_id": "cus_NffrFeUfNV2Hib"
+}
+```

@@ -1,0 +1,332 @@
+---
+title: "Get Entity"
+description: "Retrieve a specific entity by ID"
+---
+
+## Overview
+
+Retrieves detailed information about a specific entity, including its relationships to customers and features, as well as any associated subscriptions and balances.
+
+## Endpoint
+
+```
+GET /v1/entities/{entity_id}
+```
+
+## Authentication
+
+Requires an API key in the Authorization header:
+
+```
+Authorization: Bearer your_api_key
+```
+
+## Path Parameters
+
+<ParamField path="entity_id" type="string" required>
+  The unique identifier of the entity to retrieve
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="expand" type="array">
+  Additional data to include in the response. Available options:
+  
+  - `invoices` - Include invoices for this entity
+  - `subscriptions.plan` - Include full plan details for subscriptions
+  - `purchases.plan` - Include plan details for purchases
+  - `balances.feature` - Include feature details for balances
+</ParamField>
+
+<ParamField query="skip_cache" type="boolean" default={false}>
+  Bypass cache and fetch fresh data from the database
+</ParamField>
+
+<ParamField query="with_autumn_id" type="boolean" default={false}>
+  Include the internal Autumn ID in the response
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  The unique identifier of the entity
+</ResponseField>
+
+<ResponseField name="autumn_id" type="string">
+  The internal Autumn ID (only if `with_autumn_id=true`)
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The name of the entity
+</ResponseField>
+
+<ResponseField name="customer_id" type="string">
+  The customer ID this entity belongs to
+</ResponseField>
+
+<ResponseField name="feature_id" type="string">
+  The feature ID this entity counts toward
+</ResponseField>
+
+<ResponseField name="created_at" type="number">
+  Unix timestamp (in seconds) when the entity was created
+</ResponseField>
+
+<ResponseField name="env" type="string">
+  The environment: "sandbox" or "live"
+</ResponseField>
+
+<ResponseField name="subscriptions" type="array">
+  Array of subscription objects associated with this entity
+  
+  <Expandable title="Subscription properties">
+    <ResponseField name="subscriptions[].id" type="string">
+      Subscription ID
+    </ResponseField>
+    
+    <ResponseField name="subscriptions[].plan_id" type="string">
+      The plan ID
+    </ResponseField>
+    
+    <ResponseField name="subscriptions[].status" type="string">
+      Subscription status: "active", "canceled", "past_due", etc.
+    </ResponseField>
+    
+    <ResponseField name="subscriptions[].current_period_start" type="number">
+      Unix timestamp of the current billing period start
+    </ResponseField>
+    
+    <ResponseField name="subscriptions[].current_period_end" type="number">
+      Unix timestamp of the current billing period end
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="balances" type="object">
+  Object mapping feature IDs to balance information
+  
+  <Expandable title="Balance properties">
+    <ResponseField name="balances[feature_id].usage" type="number">
+      Current usage for this feature
+    </ResponseField>
+    
+    <ResponseField name="balances[feature_id].limit" type="number">
+      Usage limit for this feature
+    </ResponseField>
+    
+    <ResponseField name="balances[feature_id].remaining" type="number">
+      Remaining usage available
+    </ResponseField>
+    
+    <ResponseField name="balances[feature_id].reset_at" type="number">
+      Unix timestamp when usage resets
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="invoices" type="array">
+  Array of invoice objects (only included when `expand=invoices`)
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash curl
+curl -X GET "https://api.useautumn.com/v1/entities/user_456" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```bash curl (with expansion)
+curl -X GET "https://api.useautumn.com/v1/entities/user_456?expand=invoices&expand=subscriptions.plan" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'sk_test_...'
+});
+
+const entity = await autumn.entities.get('user_456');
+
+console.log(entity.name); // "Alice Johnson"
+console.log(entity.feature_id); // "team_seats"
+```
+
+```javascript JavaScript SDK (with expansion)
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'sk_test_...'
+});
+
+const entity = await autumn.entities.get('user_456', {
+  expand: ['invoices', 'subscriptions.plan']
+});
+
+console.log(entity.invoices); // Array of invoices
+console.log(entity.subscriptions[0].plan); // Full plan details
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: process.env.AUTUMN_SECRET_KEY!
+});
+
+const entity = await autumn.entities.get('user_456');
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    'https://api.useautumn.com/v1/entities/user_456',
+    headers={
+        'Authorization': 'Bearer sk_test_...',
+    }
+)
+
+entity = response.json()
+```
+
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "id": "user_456",
+  "name": "Alice Johnson",
+  "customer_id": "team_123",
+  "feature_id": "team_seats",
+  "created_at": 1709251200,
+  "env": "live",
+  "subscriptions": [
+    {
+      "id": "sub_abc123",
+      "plan_id": "team-plan",
+      "status": "active",
+      "current_period_start": 1709251200,
+      "current_period_end": 1711843200
+    }
+  ],
+  "scheduled_subscriptions": [],
+  "balances": {
+    "api_calls": {
+      "usage": 1250,
+      "limit": 10000,
+      "remaining": 8750,
+      "reset_at": 1711843200
+    }
+  }
+}
+```
+
+## Use Cases
+
+### Verify Entity Exists
+
+```javascript
+// Check if an entity exists before performing operations
+async function verifyTeamMember(userId) {
+  try {
+    const entity = await autumn.entities.get(userId);
+    return entity.feature_id === 'team_seats';
+  } catch (error) {
+    if (error.status === 404) {
+      return false;
+    }
+    throw error;
+  }
+}
+```
+
+### Display Entity Details
+
+```javascript
+// Show entity information in your UI
+async function getTeamMemberDetails(userId) {
+  const entity = await autumn.entities.get(userId, {
+    expand: ['subscriptions.plan', 'balances.feature']
+  });
+  
+  return {
+    name: entity.name,
+    joinedAt: new Date(entity.created_at * 1000),
+    plan: entity.subscriptions[0]?.plan,
+    usage: entity.balances
+  };
+}
+```
+
+### Audit Entity Status
+
+```javascript
+// Check entity subscription and billing status
+async function auditEntity(entityId) {
+  const entity = await autumn.entities.get(entityId, {
+    expand: ['invoices', 'subscriptions.plan']
+  });
+  
+  return {
+    isActive: entity.subscriptions.some(s => s.status === 'active'),
+    unpaidInvoices: entity.invoices?.filter(i => i.status === 'open'),
+    currentPlan: entity.subscriptions[0]?.plan?.name
+  };
+}
+```
+
+## Error Responses
+
+<ResponseField name="404 Not Found">
+  The entity with the specified ID does not exist
+  
+  ```json
+  {
+    "error": {
+      "code": "not_found",
+      "message": "Entity not found"
+    }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="401 Unauthorized">
+  Invalid or missing API key
+  
+  ```json
+  {
+    "error": {
+      "code": "unauthorized",
+      "message": "Invalid API key"
+    }
+  }
+  ```
+</ResponseField>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Create Entity" icon="plus" href="/api/entities/create">
+    Create a new entity
+  </Card>
+  <Card title="Update Entity" icon="pen" href="/api/entities/update">
+    Update entity details
+  </Card>
+  <Card title="List Entities" icon="list" href="/api/entities/list">
+    List all entities for a customer
+  </Card>
+  <Card title="Delete Entity" icon="trash" href="/api/entities/delete">
+    Delete an entity
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Entities Concept Guide](/concepts/entities)
+- [Customers API](/api/customers/get)
+- [Features API](/api/features/get)

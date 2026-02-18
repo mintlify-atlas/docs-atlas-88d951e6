@@ -1,0 +1,253 @@
+---
+title: 'Checkout'
+description: 'Create a Stripe Checkout session to collect payment from a customer'
+---
+
+## POST /checkout
+
+Create a Stripe Checkout session for a customer to purchase a product. Returns a URL that redirects the customer to a Stripe-hosted payment page.
+
+### Request Body
+
+<ParamField body="customer_id" type="string" required>
+  The ID of the customer making the purchase.
+  
+  Example: `"cus_123"`
+</ParamField>
+
+<ParamField body="product_id" type="string">
+  The ID of the product to purchase. Either `product_id` or `product_ids` must be provided.
+  
+  Example: `"pro"`
+</ParamField>
+
+<ParamField body="product_ids" type="string[]">
+  An array of product IDs to purchase. Either `product_id` or `product_ids` must be provided. Cannot contain duplicates.
+  
+  Example: `["pro", "addon_1"]`
+</ParamField>
+
+<ParamField body="entity_id" type="string">
+  The ID of the entity associated with this purchase.
+  
+  Example: `"entity_123"`
+</ParamField>
+
+<ParamField body="success_url" type="string">
+  URL to redirect to after successful payment.
+  
+  Example: `"https://example.com/success"`
+</ParamField>
+
+<ParamField body="setup_payment" type="boolean">
+  Whether to set up a payment method without charging immediately.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField body="customer_data" type="object">
+  Customer data to update or set during checkout.
+  
+  <Expandable title="CustomerData">
+    <ParamField body="name" type="string">
+      Customer's name
+    </ParamField>
+    
+    <ParamField body="email" type="string">
+      Customer's email address
+    </ParamField>
+    
+    <ParamField body="metadata" type="object">
+      Additional metadata for the customer
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="entity_data" type="object">
+  Entity data to update or set during checkout.
+</ParamField>
+
+<ParamField body="options" type="array">
+  Array of feature options to customize the product.
+</ParamField>
+
+<ParamField body="free_trial" type="boolean">
+  Whether to apply a free trial to this purchase.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField body="force_checkout" type="boolean">
+  Force a checkout flow even for free products.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField body="checkout_session_params" type="object">
+  Additional parameters to pass to the Stripe Checkout session.
+</ParamField>
+
+<ParamField body="reward" type="string | string[]">
+  Referral reward code(s) to apply to this checkout.
+</ParamField>
+
+<ParamField body="invoice" type="boolean">
+  Whether to create an invoice for this purchase.
+  
+  Default: `false`
+</ParamField>
+
+<ParamField body="new_billing_subscription" type="boolean">
+  Whether to create a new billing subscription.
+  
+  Default: `false`
+</ParamField>
+
+### Response
+
+<ResponseField name="url" type="string">
+  The Stripe Checkout URL to redirect the customer to.
+  
+  Example: `"https://checkout.stripe.com/c/pay/cs_test_..."`
+</ResponseField>
+
+<ResponseField name="customer_id" type="string">
+  The ID of the customer.
+  
+  Example: `"cus_123"`
+</ResponseField>
+
+<ResponseField name="lines" type="array">
+  Array of line items in the checkout.
+  
+  <Expandable title="CheckoutLine">
+    <ResponseField name="description" type="string">
+      Description of the line item
+    </ResponseField>
+    
+    <ResponseField name="amount" type="number">
+      Amount in cents
+    </ResponseField>
+    
+    <ResponseField name="item" type="object">
+      The product item details
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="product" type="object">
+  The product being purchased.
+</ResponseField>
+
+<ResponseField name="current_product" type="object">
+  The customer's current product, if upgrading or downgrading.
+</ResponseField>
+
+<ResponseField name="options" type="array">
+  Array of feature options applied to the product.
+</ResponseField>
+
+<ResponseField name="total" type="number">
+  Total amount in cents.
+  
+  Example: `2999`
+</ResponseField>
+
+<ResponseField name="currency" type="string">
+  Currency code.
+  
+  Example: `"usd"`
+</ResponseField>
+
+<ResponseField name="has_prorations" type="boolean">
+  Whether the checkout includes prorations.
+</ResponseField>
+
+<ResponseField name="next_cycle" type="object">
+  Information about the next billing cycle.
+  
+  <Expandable title="NextCycle">
+    <ResponseField name="starts_at" type="number">
+      Unix timestamp when the next cycle starts
+    </ResponseField>
+    
+    <ResponseField name="total" type="number">
+      Total amount for the next cycle in cents
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.autumn.com/checkout \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "cus_123",
+    "product_id": "pro",
+    "success_url": "https://example.com/success"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.autumn.com/checkout', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    customer_id: 'cus_123',
+    product_id: 'pro',
+    success_url: 'https://example.com/success'
+  })
+});
+
+const data = await response.json();
+console.log(data.url); // Redirect user to this URL
+```
+
+```python Python
+import requests
+
+response = requests.post(
+  'https://api.autumn.com/checkout',
+  headers={
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  json={
+    'customer_id': 'cus_123',
+    'product_id': 'pro',
+    'success_url': 'https://example.com/success'
+  }
+)
+
+data = response.json()
+print(data['url'])  # Redirect user to this URL
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "url": "https://checkout.stripe.com/c/pay/cs_test_a1b2c3d4e5f6g7h8i9j0",
+  "customer_id": "cus_123",
+  "lines": [
+    {
+      "description": "Pro Plan",
+      "amount": 2999,
+      "item": {
+        "id": "pro",
+        "name": "Pro Plan"
+      }
+    }
+  ],
+  "total": 2999,
+  "currency": "usd",
+  "has_prorations": false
+}
+```

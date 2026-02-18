@@ -1,0 +1,304 @@
+---
+title: 'Delete Customer'
+description: 'Permanently delete a customer and all associated data'
+api: 'DELETE /customers/{customer_id}'
+---
+
+Permanently delete a customer from your Autumn account. This action removes the customer and all their associated data including subscriptions, invoices, and usage history.
+
+<Warning>
+  **This action is irreversible.** Once a customer is deleted, all their data is permanently removed and cannot be recovered. Consider canceling subscriptions or archiving customer data before deletion.
+</Warning>
+
+## Path Parameters
+
+<ParamField path="customer_id" type="string" required>
+  The unique identifier of the customer to delete.
+  
+  ```
+  "customer_12345"
+  ```
+</ParamField>
+
+## What Gets Deleted
+
+When you delete a customer, the following data is permanently removed:
+
+- Customer profile (name, email, metadata)
+- All active subscriptions
+- All scheduled subscriptions
+- Usage history and balances
+- Invoice records
+- Payment method associations
+- Trial usage history
+- Referral data
+- Custom metadata
+
+<Info>
+  **Stripe Integration**: Deleting a customer in Autumn does not automatically delete the corresponding customer in Stripe. You must manually delete the Stripe customer if needed.
+</Info>
+
+## Response
+
+Returns a `204 No Content` response on successful deletion with no response body.
+
+<ResponseField name="status" type="204">
+  Success - customer has been deleted.
+</ResponseField>
+
+## Error Responses
+
+<ResponseField name="404 Not Found">
+  The specified customer does not exist.
+  
+  ```json
+  {
+    "error": {
+      "message": "Customer not found",
+      "code": "not_found"
+    }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="403 Forbidden">
+  You don't have permission to delete this customer.
+  
+  ```json
+  {
+    "error": {
+      "message": "Insufficient permissions",
+      "code": "forbidden"
+    }
+  }
+  ```
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://api.autumn.ai/v1/customers/customer_12345 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@autumn.ai/sdk';
+
+const autumn = new Autumn({ apiKey: 'YOUR_API_KEY' });
+
+try {
+  await autumn.customers.delete('customer_12345');
+  console.log('Customer deleted successfully');
+} catch (error) {
+  if (error.code === 'not_found') {
+    console.log('Customer does not exist');
+  } else {
+    console.error('Error deleting customer:', error);
+  }
+}
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@autumn.ai/sdk';
+
+const autumn = new Autumn({ apiKey: 'YOUR_API_KEY' });
+
+const deleteCustomer = async (customerId: string): Promise<boolean> => {
+  try {
+    await autumn.customers.delete(customerId);
+    return true;
+  } catch (error) {
+    console.error(`Failed to delete customer ${customerId}:`, error);
+    return false;
+  }
+};
+
+const success = await deleteCustomer('customer_12345');
+if (success) {
+  console.log('Customer deleted');
+}
+```
+
+```python Python SDK
+from autumn import Autumn
+from autumn.exceptions import NotFoundError
+
+autumn = Autumn(api_key="YOUR_API_KEY")
+
+try:
+    autumn.customers.delete("customer_12345")
+    print("Customer deleted successfully")
+except NotFoundError:
+    print("Customer does not exist")
+except Exception as error:
+    print(f"Error deleting customer: {error}")
+```
+</CodeGroup>
+
+## Best Practices
+
+### 1. Cancel subscriptions first
+Before deleting a customer, cancel their active subscriptions to ensure proper cleanup:
+
+```javascript
+// Cancel all subscriptions first
+const customer = await autumn.customers.get('customer_12345');
+
+for (const subscription of customer.subscriptions) {
+  await autumn.subscriptions.cancel(subscription.id);
+}
+
+// Then delete the customer
+await autumn.customers.delete('customer_12345');
+```
+
+### 2. Archive important data
+Export critical customer data before deletion:
+
+```javascript
+// Fetch full customer details with all related data
+const customerData = await autumn.customers.get('customer_12345', {
+  expand: ['invoices', 'subscriptions', 'entities']
+});
+
+// Archive to your database or storage
+await archiveCustomerData(customerData);
+
+// Then proceed with deletion
+await autumn.customers.delete('customer_12345');
+```
+
+### 3. Verify customer identity
+Confirm the customer ID before deletion:
+
+```javascript
+const confirmDelete = async (customerId: string, expectedEmail: string) => {
+  const customer = await autumn.customers.get(customerId);
+  
+  if (customer.email !== expectedEmail) {
+    throw new Error('Customer email does not match. Deletion aborted.');
+  }
+  
+  await autumn.customers.delete(customerId);
+};
+
+await confirmDelete('customer_12345', 'john@example.com');
+```
+
+### 4. Handle Stripe cleanup
+If using Stripe integration, delete the Stripe customer separately:
+
+```javascript
+import Stripe from 'stripe';
+
+const stripe = new Stripe('sk_test_...');
+
+// Get customer's Stripe ID
+const customer = await autumn.customers.get('customer_12345');
+
+// Delete from Autumn
+await autumn.customers.delete('customer_12345');
+
+// Delete from Stripe if exists
+if (customer.stripe_id) {
+  await stripe.customers.del(customer.stripe_id);
+}
+```
+
+## Common Use Cases
+
+### GDPR/Privacy Compliance
+Delete customer data upon request:
+
+```javascript
+const handleDataDeletionRequest = async (customerId: string) => {
+  // 1. Export data for compliance records
+  const customerData = await autumn.customers.get(customerId, {
+    expand: ['invoices', 'subscriptions']
+  });
+  await exportForCompliance(customerData);
+  
+  // 2. Cancel active subscriptions
+  for (const sub of customerData.subscriptions) {
+    await autumn.subscriptions.cancel(sub.id);
+  }
+  
+  // 3. Delete from Autumn
+  await autumn.customers.delete(customerId);
+  
+  // 4. Delete from Stripe
+  if (customerData.stripe_id) {
+    await stripe.customers.del(customerData.stripe_id);
+  }
+  
+  console.log(`All data for customer ${customerId} has been deleted`);
+};
+```
+
+### Cleanup test customers
+Bulk delete test/development customers:
+
+```javascript
+const cleanupTestCustomers = async () => {
+  const { list } = await autumn.customers.list({ limit: 100 });
+  
+  const testCustomers = list.filter(c => 
+    c.env === 'development' || c.email?.includes('+test@')
+  );
+  
+  for (const customer of testCustomers) {
+    await autumn.customers.delete(customer.id);
+    console.log(`Deleted test customer: ${customer.id}`);
+  }
+  
+  console.log(`Cleaned up ${testCustomers.length} test customers`);
+};
+```
+
+### Delete inactive customers
+Remove customers with no recent activity:
+
+```javascript
+const deleteInactiveCustomers = async (daysInactive: number) => {
+  const cutoffDate = Date.now() - (daysInactive * 24 * 60 * 60 * 1000);
+  const { list } = await autumn.customers.list({ limit: 100 });
+  
+  const inactiveCustomers = list.filter(customer => {
+    const hasNoSubscriptions = customer.subscriptions.length === 0;
+    const isOld = customer.created_at * 1000 < cutoffDate;
+    return hasNoSubscriptions && isOld;
+  });
+  
+  for (const customer of inactiveCustomers) {
+    await autumn.customers.delete(customer.id);
+    console.log(`Deleted inactive customer: ${customer.id}`);
+  }
+};
+
+await deleteInactiveCustomers(365); // Delete customers inactive for 1 year
+```
+
+## Important Notes
+
+<Warning>
+  **No undo**: Customer deletion is permanent and cannot be reversed. Ensure you have backups of any critical data before deletion.
+</Warning>
+
+<Info>
+  **Subscription cleanup**: All active and scheduled subscriptions are automatically canceled and removed when a customer is deleted.
+</Info>
+
+<Tip>
+  **Soft delete alternative**: If you need to preserve data for compliance or historical purposes, consider marking customers as inactive in your metadata instead of deleting them:
+  
+  ```javascript
+  await autumn.customers.update('customer_12345', {
+    metadata: {
+      ...existingMetadata,
+      deleted_at: new Date().toISOString(),
+      status: 'deleted'
+    }
+  });
+  ```
+</Tip>

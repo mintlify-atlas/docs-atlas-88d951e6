@@ -1,0 +1,268 @@
+---
+title: 'Get Customer'
+description: 'Retrieve a single customer by their ID'
+api: 'GET /customers/{customer_id}'
+---
+
+Retrieve detailed information about a specific customer, including their subscriptions, balances, and optionally expanded related resources like invoices and payment methods.
+
+## Path Parameters
+
+<ParamField path="customer_id" type="string" required>
+  The unique identifier of the customer to retrieve.
+  
+  ```
+  "customer_12345"
+  ```
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="expand" type="string[]">
+  Array of related resources to include in the response. This allows you to fetch related data in a single request instead of making multiple API calls.
+  
+  Available options:
+  - `invoices` - Include all invoices for this customer
+  - `entities` - Include associated entities (e.g., team members, seats)
+  - `trials_used` - Include history of trials the customer has used
+  - `rewards` - Include active rewards and discount information
+  - `referrals` - Include referral program data
+  - `payment_method` - Include default payment method details
+  
+  ```
+  ?expand=invoices,payment_method,subscriptions
+  ```
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  Your unique identifier for the customer.
+</ResponseField>
+
+<ResponseField name="name" type="string | null">
+  Customer's name.
+</ResponseField>
+
+<ResponseField name="email" type="string | null">
+  Customer's email address.
+</ResponseField>
+
+<ResponseField name="created_at" type="number">
+  Unix timestamp (in seconds) when the customer was created.
+  
+  ```
+  1705932800
+  ```
+</ResponseField>
+
+<ResponseField name="fingerprint" type="string | null">
+  Device or hardware fingerprint used for duplicate detection.
+</ResponseField>
+
+<ResponseField name="stripe_id" type="string | null">
+  Associated Stripe customer ID if integrated with Stripe.
+</ResponseField>
+
+<ResponseField name="env" type="string">
+  Environment where the customer exists: `production` or `development`.
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Custom key-value pairs with additional data about the customer.
+  
+  ```json
+  {
+    "company": "Acme Inc",
+    "plan_tier": "enterprise",
+    "signup_source": "website"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="send_email_receipts" type="boolean">
+  Whether email receipts are enabled for this customer.
+</ResponseField>
+
+<ResponseField name="subscriptions" type="array">
+  Array of active subscriptions for this customer.
+  <Expandable title="Subscription Object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the subscription.
+    </ResponseField>
+    <ResponseField name="plan_id" type="string">
+      ID of the plan this subscription is for.
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Current status: `active`, `canceled`, `past_due`, `trialing`, etc.
+    </ResponseField>
+    <ResponseField name="current_period_start" type="number">
+      Unix timestamp when the current billing period started.
+    </ResponseField>
+    <ResponseField name="current_period_end" type="number">
+      Unix timestamp when the current billing period ends.
+    </ResponseField>
+    <ResponseField name="cancel_at_period_end" type="boolean">
+      Whether the subscription will be canceled at the end of the current period.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="scheduled_subscriptions" type="array">
+  Array of subscriptions scheduled to start in the future.
+</ResponseField>
+
+<ResponseField name="balances" type="object">
+  Object mapping feature IDs to their current balance amounts. Used for credit-based or usage-based features.
+  
+  ```json
+  {
+    "feature_api_calls": 5000,
+    "feature_storage_gb": 100
+  }
+  ```
+</ResponseField>
+
+### Expanded Fields (when requested)
+
+<ResponseField name="invoices" type="array">
+  Array of invoices for this customer. Only included when `expand=invoices` is specified.
+  <Expandable title="Invoice Object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the invoice.
+    </ResponseField>
+    <ResponseField name="amount" type="number">
+      Total amount of the invoice in cents.
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Payment status: `paid`, `open`, `void`, `uncollectible`.
+    </ResponseField>
+    <ResponseField name="created_at" type="number">
+      Unix timestamp when the invoice was created.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="entities" type="array">
+  Array of entities (seats, team members, etc.) associated with this customer. Only included when `expand=entities` is specified.
+</ResponseField>
+
+<ResponseField name="trials_used" type="array">
+  Array of trials the customer has used. Only included when `expand=trials_used` is specified.
+  <Expandable title="Trial Object">
+    <ResponseField name="plan_id" type="string">
+      ID of the plan that was trialed.
+    </ResponseField>
+    <ResponseField name="started_at" type="number">
+      When the trial started.
+    </ResponseField>
+    <ResponseField name="ended_at" type="number">
+      When the trial ended.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="rewards" type="object | null">
+  Active rewards and discounts for this customer. Only included when `expand=rewards` is specified.
+</ResponseField>
+
+<ResponseField name="referrals" type="array">
+  Referral program data for this customer. Only included when `expand=referrals` is specified.
+</ResponseField>
+
+<ResponseField name="payment_method" type="object | null">
+  Default payment method details. Only included when `expand=payment_method` is specified.
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash cURL - Basic
+curl -X GET https://api.autumn.ai/v1/customers/customer_12345 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```bash cURL - With Expanded Fields
+curl -X GET "https://api.autumn.ai/v1/customers/customer_12345?expand=invoices,payment_method" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@autumn.ai/sdk';
+
+const autumn = new Autumn({ apiKey: 'YOUR_API_KEY' });
+
+// Basic retrieval
+const customer = await autumn.customers.get('customer_12345');
+
+// With expanded fields
+const customerWithDetails = await autumn.customers.get('customer_12345', {
+  expand: ['invoices', 'payment_method', 'subscriptions']
+});
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@autumn.ai/sdk';
+
+const autumn = new Autumn({ apiKey: 'YOUR_API_KEY' });
+
+const customer = await autumn.customers.get('customer_12345', {
+  expand: ['invoices', 'payment_method']
+});
+
+console.log(`Customer: ${customer.name}`);
+console.log(`Subscriptions: ${customer.subscriptions.length}`);
+if (customer.invoices) {
+  console.log(`Total invoices: ${customer.invoices.length}`);
+}
+```
+
+```python Python SDK
+from autumn import Autumn
+
+autumn = Autumn(api_key="YOUR_API_KEY")
+
+# Basic retrieval
+customer = autumn.customers.get("customer_12345")
+
+# With expanded fields
+customer_with_details = autumn.customers.get(
+    "customer_12345",
+    expand=["invoices", "payment_method", "subscriptions"]
+)
+```
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "id": "customer_12345",
+  "name": "John Doe",
+  "email": "john@example.com",
+  "created_at": 1705932800,
+  "fingerprint": "fp_abc123",
+  "stripe_id": "cus_NffrFeUfNV2Hib",
+  "env": "production",
+  "metadata": {
+    "company": "Acme Inc",
+    "plan_tier": "enterprise"
+  },
+  "send_email_receipts": true,
+  "subscriptions": [
+    {
+      "id": "sub_123",
+      "plan_id": "plan_pro",
+      "status": "active",
+      "current_period_start": 1705932800,
+      "current_period_end": 1708524800,
+      "cancel_at_period_end": false
+    }
+  ],
+  "scheduled_subscriptions": [],
+  "balances": {
+    "feature_api_calls": 5000,
+    "feature_storage_gb": 100
+  }
+}
+```

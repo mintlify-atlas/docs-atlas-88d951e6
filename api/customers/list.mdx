@@ -1,0 +1,316 @@
+---
+title: 'List Customers'
+description: 'Retrieve a paginated list of all customers'
+api: 'GET /customers'
+---
+
+Retrieve a paginated list of all customers in your Autumn account. Use this endpoint to browse customers, implement search functionality, or sync customer data with your systems.
+
+## Query Parameters
+
+<ParamField query="limit" type="integer" default={10}>
+  Maximum number of customers to return per page. Must be between 10 and 100.
+  
+  ```
+  ?limit=50
+  ```
+</ParamField>
+
+<ParamField query="offset" type="integer" default={0}>
+  Number of customers to skip before returning results. Use this for pagination.
+  
+  To get the second page with a limit of 50:
+  ```
+  ?limit=50&offset=50
+  ```
+  
+  To get the third page:
+  ```
+  ?limit=50&offset=100
+  ```
+</ParamField>
+
+## Response
+
+<ResponseField name="list" type="array">
+  Array of customer objects.
+  <Expandable title="Customer Object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the customer.
+    </ResponseField>
+    <ResponseField name="name" type="string | null">
+      Customer's name.
+    </ResponseField>
+    <ResponseField name="email" type="string | null">
+      Customer's email address.
+    </ResponseField>
+    <ResponseField name="created_at" type="number">
+      Unix timestamp when the customer was created.
+    </ResponseField>
+    <ResponseField name="fingerprint" type="string | null">
+      Device fingerprint for duplicate detection.
+    </ResponseField>
+    <ResponseField name="stripe_id" type="string | null">
+      Associated Stripe customer ID.
+    </ResponseField>
+    <ResponseField name="env" type="string">
+      Environment: `production` or `development`.
+    </ResponseField>
+    <ResponseField name="metadata" type="object">
+      Custom metadata key-value pairs.
+    </ResponseField>
+    <ResponseField name="send_email_receipts" type="boolean">
+      Whether email receipts are enabled.
+    </ResponseField>
+    <ResponseField name="subscriptions" type="array">
+      Array of active subscriptions.
+    </ResponseField>
+    <ResponseField name="scheduled_subscriptions" type="array">
+      Array of scheduled future subscriptions.
+    </ResponseField>
+    <ResponseField name="balances" type="object">
+      Feature balances mapped by feature ID.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="total" type="integer">
+  Total number of customers available across all pages. Use this to calculate the total number of pages.
+  
+  ```
+  245
+  ```
+</ResponseField>
+
+<ResponseField name="limit" type="integer">
+  The limit value used for this request (maximum number of customers returned).
+  
+  ```
+  50
+  ```
+</ResponseField>
+
+<ResponseField name="offset" type="integer">
+  The offset value used for this request (number of customers skipped).
+  
+  ```
+  0
+  ```
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash cURL - First Page
+curl -X GET "https://api.autumn.ai/v1/customers?limit=50&offset=0" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```bash cURL - Second Page
+curl -X GET "https://api.autumn.ai/v1/customers?limit=50&offset=50" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@autumn.ai/sdk';
+
+const autumn = new Autumn({ apiKey: 'YOUR_API_KEY' });
+
+// Get first page
+const firstPage = await autumn.customers.list({
+  limit: 50,
+  offset: 0
+});
+
+console.log(`Total customers: ${firstPage.total}`);
+console.log(`Retrieved: ${firstPage.list.length}`);
+
+// Get next page
+const secondPage = await autumn.customers.list({
+  limit: 50,
+  offset: 50
+});
+```
+
+```typescript TypeScript SDK - Pagination Loop
+import { Autumn } from '@autumn.ai/sdk';
+
+const autumn = new Autumn({ apiKey: 'YOUR_API_KEY' });
+
+const allCustomers = [];
+const limit = 100;
+let offset = 0;
+
+while (true) {
+  const response = await autumn.customers.list({ limit, offset });
+  allCustomers.push(...response.list);
+  
+  console.log(`Fetched ${response.list.length} customers (${allCustomers.length}/${response.total})`);
+  
+  // Check if we've retrieved all customers
+  if (offset + limit >= response.total) {
+    break;
+  }
+  
+  offset += limit;
+}
+
+console.log(`Retrieved all ${allCustomers.length} customers`);
+```
+
+```python Python SDK
+from autumn import Autumn
+
+autumn = Autumn(api_key="YOUR_API_KEY")
+
+# Get first page
+first_page = autumn.customers.list(limit=50, offset=0)
+
+print(f"Total customers: {first_page.total}")
+print(f"Retrieved: {len(first_page.list)}")
+
+# Iterate through all pages
+all_customers = []
+limit = 100
+offset = 0
+
+while True:
+    response = autumn.customers.list(limit=limit, offset=offset)
+    all_customers.extend(response.list)
+    
+    print(f"Fetched {len(response.list)} customers ({len(all_customers)}/{response.total})")
+    
+    if offset + limit >= response.total:
+        break
+    
+    offset += limit
+
+print(f"Retrieved all {len(all_customers)} customers")
+```
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "list": [
+    {
+      "id": "customer_12345",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "created_at": 1705932800,
+      "fingerprint": "fp_abc123",
+      "stripe_id": "cus_NffrFeUfNV2Hib",
+      "env": "production",
+      "metadata": {
+        "company": "Acme Inc"
+      },
+      "send_email_receipts": true,
+      "subscriptions": [
+        {
+          "id": "sub_123",
+          "plan_id": "plan_pro",
+          "status": "active"
+        }
+      ],
+      "scheduled_subscriptions": [],
+      "balances": {
+        "feature_api_calls": 5000
+      }
+    },
+    {
+      "id": "customer_67890",
+      "name": "Jane Smith",
+      "email": "jane@startup.com",
+      "created_at": 1705846400,
+      "fingerprint": null,
+      "stripe_id": "cus_OtherStripeId",
+      "env": "production",
+      "metadata": {},
+      "send_email_receipts": true,
+      "subscriptions": [],
+      "scheduled_subscriptions": [],
+      "balances": {}
+    }
+  ],
+  "total": 245,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+## Pagination Guide
+
+To implement pagination:
+
+1. **Calculate total pages**:
+   ```javascript
+   const totalPages = Math.ceil(response.total / limit);
+   ```
+
+2. **Navigate to a specific page**:
+   ```javascript
+   const page = 3; // zero-indexed: 0, 1, 2, ...
+   const limit = 50;
+   const offset = page * limit;
+   
+   const response = await autumn.customers.list({ limit, offset });
+   ```
+
+3. **Check if there's a next page**:
+   ```javascript
+   const hasNextPage = (offset + limit) < response.total;
+   ```
+
+4. **Check if there's a previous page**:
+   ```javascript
+   const hasPreviousPage = offset > 0;
+   ```
+
+## Common Use Cases
+
+### Fetch all customers (auto-pagination)
+```javascript
+const allCustomers = [];
+let offset = 0;
+const limit = 100;
+
+while (true) {
+  const { list, total } = await autumn.customers.list({ limit, offset });
+  allCustomers.push(...list);
+  
+  if (offset + limit >= total) break;
+  offset += limit;
+}
+```
+
+### Search for customers by email (client-side filtering)
+```javascript
+const searchEmail = 'john@example.com';
+const { list } = await autumn.customers.list({ limit: 100 });
+const matches = list.filter(customer => 
+  customer.email?.toLowerCase().includes(searchEmail.toLowerCase())
+);
+```
+
+### Get customers with active subscriptions
+```javascript
+const { list } = await autumn.customers.list({ limit: 100 });
+const activeSubscribers = list.filter(customer => 
+  customer.subscriptions.length > 0
+);
+```
+
+## Notes
+
+<Info>
+  **Performance**: The maximum limit is 100 customers per request. For optimal performance, use the maximum limit and implement efficient pagination.
+</Info>
+
+<Warning>
+  **Filtering**: This endpoint returns all customers. Implement client-side filtering or use the Get Customer endpoint if you know the specific customer ID.
+</Warning>
+
+<Tip>
+  **Sorting**: Customers are returned in order of creation date, with newest customers first. This ordering is consistent across pagination requests.
+</Tip>

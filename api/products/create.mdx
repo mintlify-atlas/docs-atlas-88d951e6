@@ -1,0 +1,499 @@
+---
+title: 'Create Product'
+description: 'Create a new product with plans, features, and pricing configurations'
+---
+
+## Overview
+
+Create a new product (also known as a plan) with configurable features, pricing models, and free trial options. Products can include recurring subscriptions, one-time purchases, and usage-based pricing.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.useautumn.com/products \
+  -H "Authorization: Bearer YOUR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "pro-plan",
+    "name": "Pro Plan",
+    "description": "Professional features for growing teams",
+    "is_add_on": false,
+    "is_default": false,
+    "group": "main-plans",
+    "items": [
+      {
+        "price": 29,
+        "interval": "month"
+      },
+      {
+        "feature_id": "api-calls",
+        "included_usage": 10000,
+        "price": 0.01,
+        "interval": "month",
+        "usage_model": "pay_per_use"
+      }
+    ],
+    "free_trial": {
+      "duration": "day",
+      "length": 14,
+      "card_required": true,
+      "unique_fingerprint": false
+    }
+  }'
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'YOUR_SECRET_KEY'
+});
+
+const product = await autumn.products.create({
+  id: 'pro-plan',
+  name: 'Pro Plan',
+  description: 'Professional features for growing teams',
+  is_add_on: false,
+  is_default: false,
+  group: 'main-plans',
+  items: [
+    {
+      price: 29,
+      interval: 'month'
+    },
+    {
+      feature_id: 'api-calls',
+      included_usage: 10000,
+      price: 0.01,
+      interval: 'month',
+      usage_model: 'pay_per_use'
+    }
+  ],
+  free_trial: {
+    duration: 'day',
+    length: 14,
+    card_required: true,
+    unique_fingerprint: false
+  }
+});
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'YOUR_SECRET_KEY'
+});
+
+const product = await autumn.products.create({
+  id: 'pro-plan',
+  name: 'Pro Plan',
+  description: 'Professional features for growing teams',
+  is_add_on: false,
+  is_default: false,
+  group: 'main-plans',
+  items: [
+    {
+      price: 29,
+      interval: 'month'
+    },
+    {
+      feature_id: 'api-calls',
+      included_usage: 10000,
+      price: 0.01,
+      interval: 'month',
+      usage_model: 'pay_per_use'
+    }
+  ],
+  free_trial: {
+    duration: 'day',
+    length: 14,
+    card_required: true,
+    unique_fingerprint: false
+  }
+});
+```
+</CodeGroup>
+
+## Request Body
+
+<ParamField body="id" type="string" required>
+  The unique identifier for the product. Used in other API calls like checkout or update product. Must be URL-safe and unique within your environment.
+  
+  Example: `pro-plan`, `enterprise-tier`
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  The display name of the product shown to customers.
+  
+  Example: `Pro Plan`, `Enterprise Tier`
+</ParamField>
+
+<ParamField body="description" type="string">
+  A description of the product and what it includes.
+  
+  Example: `Professional features for growing teams`
+</ParamField>
+
+<ParamField body="is_add_on" type="boolean" default={false}>
+  Whether the product is an add-on. Add-on products can be attached multiple times and don't follow upgrade/downgrade flows.
+  
+  Use this for products like extra storage, additional seats, or premium features that complement base plans.
+</ParamField>
+
+<ParamField body="is_default" type="boolean" default={false}>
+  Whether the product is the default product. Default products are automatically enabled for new customers.
+</ParamField>
+
+<ParamField body="group" type="string">
+  Product group which this product belongs to. Products within a group have upgrade/downgrade logic when customers move between them.
+  
+  Example: `main-plans`, `storage-tiers`
+</ParamField>
+
+<ParamField body="items" type="array">
+  Array of product items that define the product's features and pricing. Each item can be a base price, a feature with usage limits, or a priced feature.
+  
+  <Expandable title="Product Item Properties">
+    <ParamField body="type" type="string">
+      The type of product item: `price`, `feature`, or `priced_feature`
+    </ParamField>
+    
+    <ParamField body="price" type="number">
+      The price amount. For base prices, this is the recurring subscription cost. For priced features, this is the per-unit cost.
+    </ParamField>
+    
+    <ParamField body="interval" type="string">
+      The billing or reset interval. Options: `one_off`, `week`, `month`, `quarter`, `semi_annual`, `year`
+      
+      For features, this is when usage resets. For prices, this is the billing frequency.
+    </ParamField>
+    
+    <ParamField body="interval_count" type="number" default={1}>
+      The number of intervals between billings or resets. For example, `interval_count: 3` with `interval: "month"` means every 3 months.
+    </ParamField>
+    
+    <ParamField body="feature_id" type="string">
+      The ID of the feature this item tracks. Required for feature and priced feature items. Should be null for base prices.
+    </ParamField>
+    
+    <ParamField body="included_usage" type="number">
+      The amount of usage included for this feature (per interval). Use with feature items to set limits.
+      
+      Example: `10000` for 10,000 API calls per month
+    </ParamField>
+    
+    <ParamField body="usage_model" type="string">
+      How the feature is billed. Options:
+      - `prepaid`: Customer pays upfront for included usage
+      - `pay_per_use`: Customer pays based on actual usage at end of billing period
+    </ParamField>
+    
+    <ParamField body="billing_units" type="number">
+      The billing units for usage-based pricing. For example, if `billing_units: 1000` and `price: 0.5`, customers pay $0.50 per 1,000 units.
+    </ParamField>
+    
+    <ParamField body="tiers" type="array">
+      Tiered pricing configuration for volume-based discounts.
+      
+      <Expandable title="Tier Properties">
+        <ParamField body="to" type="number | 'inf'">
+          The maximum usage for this tier. Use `"inf"` for unlimited.
+        </ParamField>
+        
+        <ParamField body="amount" type="number">
+          The price per unit in this tier.
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    
+    <ParamField body="reset_usage_when_enabled" type="boolean">
+      Whether to reset usage when the product is enabled for a customer.
+    </ParamField>
+    
+    <ParamField body="entity_feature_id" type="string">
+      The feature ID of the entity (like seats) to track sub-balances for.
+    </ParamField>
+    
+    <ParamField body="config" type="object">
+      Advanced configuration for proration and rollover behavior.
+      
+      <Expandable title="Config Properties">
+        <ParamField body="on_increase" type="string">
+          Proration behavior when increasing usage: `immediate_charge`, `prorate`, or `none`
+        </ParamField>
+        
+        <ParamField body="on_decrease" type="string">
+          Proration behavior when decreasing usage: `immediate_refund`, `credit`, or `none`
+        </ParamField>
+        
+        <ParamField body="rollover" type="object">
+          Rollover configuration for unused usage.
+          
+          <ParamField body="max" type="number">
+            Maximum amount that can rollover. Use `null` for unlimited.
+          </ParamField>
+          
+          <ParamField body="duration" type="string">
+            How long rolled over usage lasts: `day`, `month`, `year`
+          </ParamField>
+          
+          <ParamField body="length" type="number">
+            Number of duration units the rollover lasts.
+          </ParamField>
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="free_trial" type="object">
+  Free trial configuration for this product. When set, customers can try the product before being charged.
+  
+  <Expandable title="Free Trial Properties">
+    <ParamField body="duration" type="string" required>
+      The duration type: `day`, `month`, or `year`
+    </ParamField>
+    
+    <ParamField body="length" type="number" required>
+      The length of the free trial in the specified duration units.
+      
+      Example: `14` days, `1` month
+    </ParamField>
+    
+    <ParamField body="card_required" type="boolean" default={true}>
+      Whether a payment method is required to start the trial. If `false`, customers can attach the product without checkout or a card on file.
+    </ParamField>
+    
+    <ParamField body="unique_fingerprint" type="boolean" default={false}>
+      Whether the free trial is limited to one per customer fingerprint. Use this to prevent abuse by limiting trials per device/browser.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  The unique identifier of the product.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The display name of the product.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  The product description.
+</ResponseField>
+
+<ResponseField name="group" type="string">
+  The product group identifier.
+</ResponseField>
+
+<ResponseField name="env" type="string">
+  The environment of the product: `sandbox` or `production`
+</ResponseField>
+
+<ResponseField name="is_add_on" type="boolean">
+  Whether the product is an add-on.
+</ResponseField>
+
+<ResponseField name="is_default" type="boolean">
+  Whether the product is the default product.
+</ResponseField>
+
+<ResponseField name="archived" type="boolean">
+  Whether the product has been archived.
+</ResponseField>
+
+<ResponseField name="version" type="number">
+  The current version of the product.
+</ResponseField>
+
+<ResponseField name="created_at" type="number">
+  The timestamp when the product was created (milliseconds since epoch).
+</ResponseField>
+
+<ResponseField name="items" type="array">
+  Array of product items with their configuration and display information.
+  
+  <Expandable title="Product Item Response">
+    <ResponseField name="type" type="string">
+      The type: `price`, `feature`, or `priced_feature`
+    </ResponseField>
+    
+    <ResponseField name="feature_id" type="string">
+      The feature identifier, or null for base prices.
+    </ResponseField>
+    
+    <ResponseField name="included_usage" type="number">
+      The included usage amount for this feature.
+    </ResponseField>
+    
+    <ResponseField name="interval" type="string">
+      The billing or reset interval.
+    </ResponseField>
+    
+    <ResponseField name="interval_count" type="number">
+      The number of intervals.
+    </ResponseField>
+    
+    <ResponseField name="price" type="number">
+      The price per unit or billing amount.
+    </ResponseField>
+    
+    <ResponseField name="usage_model" type="string">
+      The usage billing model: `prepaid` or `pay_per_use`
+    </ResponseField>
+    
+    <ResponseField name="billing_units" type="number">
+      The billing units for usage-based pricing.
+    </ResponseField>
+    
+    <ResponseField name="display" type="object">
+      Display information for the UI.
+      
+      <ResponseField name="primary_text" type="string">
+        The main display text (e.g., "10,000 API Calls")
+      </ResponseField>
+      
+      <ResponseField name="secondary_text" type="string">
+        Additional display text (e.g., "then $0.01 per 1,000 calls")
+      </ResponseField>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="free_trial" type="object">
+  The free trial configuration, if set.
+  
+  <ResponseField name="duration" type="string">
+    The duration type: `day`, `month`, or `year`
+  </ResponseField>
+  
+  <ResponseField name="length" type="number">
+    The trial length in duration units.
+  </ResponseField>
+  
+  <ResponseField name="card_required" type="boolean">
+    Whether a payment method is required.
+  </ResponseField>
+  
+  <ResponseField name="unique_fingerprint" type="boolean">
+    Whether trials are limited per fingerprint.
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="base_variant_id" type="string">
+  ID of the base variant this product is derived from, if any.
+</ResponseField>
+
+<ResponseField name="scenario" type="string">
+  The attach scenario for this product.
+</ResponseField>
+
+## Examples
+
+### Basic Subscription Plan
+
+Create a simple monthly subscription with a fixed price:
+
+```json
+{
+  "id": "basic-monthly",
+  "name": "Basic Plan",
+  "items": [
+    {
+      "price": 9.99,
+      "interval": "month"
+    }
+  ]
+}
+```
+
+### Usage-Based Pricing
+
+Create a product with prepaid usage and overage charges:
+
+```json
+{
+  "id": "api-product",
+  "name": "API Access",
+  "items": [
+    {
+      "price": 20,
+      "interval": "month"
+    },
+    {
+      "feature_id": "api-calls",
+      "included_usage": 10000,
+      "price": 0.01,
+      "interval": "month",
+      "usage_model": "pay_per_use",
+      "billing_units": 1000
+    }
+  ]
+}
+```
+
+### Tiered Pricing
+
+Create a product with volume-based pricing tiers:
+
+```json
+{
+  "id": "enterprise-plan",
+  "name": "Enterprise Plan",
+  "items": [
+    {
+      "feature_id": "messages",
+      "included_usage": 0,
+      "interval": "month",
+      "usage_model": "pay_per_use",
+      "tiers": [
+        { "to": 1000, "amount": 0.10 },
+        { "to": 10000, "amount": 0.05 },
+        { "to": "inf", "amount": 0.01 }
+      ]
+    }
+  ]
+}
+```
+
+### One-Time Purchase
+
+Create a product with a one-time payment:
+
+```json
+{
+  "id": "lifetime-access",
+  "name": "Lifetime Access",
+  "items": [
+    {
+      "price": 299,
+      "interval": "one_off"
+    }
+  ]
+}
+```
+
+### Product with Free Trial
+
+Create a product with a 14-day free trial:
+
+```json
+{
+  "id": "pro-trial",
+  "name": "Pro Plan with Trial",
+  "items": [
+    {
+      "price": 49,
+      "interval": "month"
+    }
+  ],
+  "free_trial": {
+    "duration": "day",
+    "length": 14,
+    "card_required": true,
+    "unique_fingerprint": false
+  }
+}
+```

@@ -1,0 +1,345 @@
+---
+title: 'Get Product'
+description: 'Retrieve a specific product by ID with all its configuration details'
+---
+
+## Overview
+
+Retrieve detailed information about a specific product including its features, pricing configuration, and free trial settings. This endpoint returns the complete product structure with all items and metadata.
+
+<CodeGroup>
+```bash cURL
+curl https://api.useautumn.com/products/pro-plan \
+  -H "Authorization: Bearer YOUR_SECRET_KEY"
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'YOUR_SECRET_KEY'
+});
+
+const product = await autumn.products.get('pro-plan');
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'YOUR_SECRET_KEY'
+});
+
+const product = await autumn.products.get('pro-plan');
+```
+</CodeGroup>
+
+## Path Parameters
+
+<ParamField path="product_id" type="string" required>
+  The unique identifier of the product to retrieve.
+  
+  Example: `pro-plan`, `enterprise-tier`
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  The unique identifier of the product.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The display name of the product.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  The product description.
+</ResponseField>
+
+<ResponseField name="group" type="string">
+  The product group identifier. Products in the same group follow upgrade/downgrade logic.
+</ResponseField>
+
+<ResponseField name="env" type="string">
+  The environment of the product: `sandbox` or `production`
+</ResponseField>
+
+<ResponseField name="is_add_on" type="boolean">
+  Whether the product is an add-on that can be attached multiple times without upgrade/downgrade flows.
+</ResponseField>
+
+<ResponseField name="is_default" type="boolean">
+  Whether this is the default product automatically enabled for new customers.
+</ResponseField>
+
+<ResponseField name="archived" type="boolean">
+  Whether the product has been archived and is no longer available for new customers.
+</ResponseField>
+
+<ResponseField name="version" type="number">
+  The current version number of the product. Increments with each update.
+</ResponseField>
+
+<ResponseField name="created_at" type="number">
+  The timestamp when the product was created (milliseconds since epoch).
+</ResponseField>
+
+<ResponseField name="items" type="array">
+  Array of product items that define the product's features and pricing structure.
+  
+  <Expandable title="Product Item Properties">
+    <ResponseField name="type" type="string">
+      The type of item: `price`, `feature`, or `priced_feature`
+    </ResponseField>
+    
+    <ResponseField name="feature_id" type="string">
+      The identifier of the feature being tracked. Null for base price items.
+    </ResponseField>
+    
+    <ResponseField name="feature_type" type="string">
+      The type of feature: `single_use`, `continuous_use`, `boolean`, or `static`
+    </ResponseField>
+    
+    <ResponseField name="included_usage" type="number">
+      The amount of usage included for this feature per interval.
+      
+      Example: `10000` for 10,000 API calls per month
+    </ResponseField>
+    
+    <ResponseField name="interval" type="string">
+      The billing or reset interval: `one_off`, `week`, `month`, `quarter`, `semi_annual`, `year`
+    </ResponseField>
+    
+    <ResponseField name="interval_count" type="number">
+      The number of intervals between billings or resets.
+    </ResponseField>
+    
+    <ResponseField name="price" type="number">
+      The price amount. For base prices, this is the recurring cost. For features, this is the per-unit overage cost.
+    </ResponseField>
+    
+    <ResponseField name="tiers" type="array">
+      Tiered pricing configuration for volume-based pricing.
+      
+      <Expandable title="Tier Properties">
+        <ResponseField name="to" type="number | 'inf'">
+          The maximum usage for this tier. Use `"inf"` for unlimited.
+        </ResponseField>
+        
+        <ResponseField name="amount" type="number">
+          The price per unit in this tier.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="usage_model" type="string">
+      How the feature is billed:
+      - `prepaid`: Customer pays upfront
+      - `pay_per_use`: Customer pays based on actual usage
+    </ResponseField>
+    
+    <ResponseField name="billing_units" type="number">
+      The billing units for usage-based pricing. For example, if set to `1000`, pricing applies per 1,000 units.
+    </ResponseField>
+    
+    <ResponseField name="reset_usage_when_enabled" type="boolean">
+      Whether usage resets when the product is attached to a customer.
+    </ResponseField>
+    
+    <ResponseField name="entity_feature_id" type="string">
+      The feature ID for tracking sub-balances (e.g., seats, users).
+    </ResponseField>
+    
+    <ResponseField name="display" type="object">
+      Display information for user interfaces.
+      
+      <ResponseField name="primary_text" type="string">
+        The main display text shown to customers.
+        
+        Example: `"10,000 API Calls"`, `"$29"`, `"Unlimited Storage"`
+      </ResponseField>
+      
+      <ResponseField name="secondary_text" type="string">
+        Additional context shown below primary text.
+        
+        Example: `"per month"`, `"then $0.01 per 1,000 calls"`
+      </ResponseField>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="free_trial" type="object">
+  Free trial configuration for this product, if available.
+  
+  <ResponseField name="duration" type="string">
+    The duration type: `day`, `month`, or `year`
+  </ResponseField>
+  
+  <ResponseField name="length" type="number">
+    The number of duration units for the trial.
+    
+    Example: `14` for a 14-day trial
+  </ResponseField>
+  
+  <ResponseField name="card_required" type="boolean">
+    Whether a payment method is required to start the trial.
+  </ResponseField>
+  
+  <ResponseField name="unique_fingerprint" type="boolean">
+    Whether trials are limited to one per customer fingerprint.
+  </ResponseField>
+  
+  <ResponseField name="trial_available" type="boolean">
+    Whether the trial is available for the current customer (only present in customer context).
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="base_variant_id" type="string">
+  ID of the base variant this product is derived from, if any.
+</ResponseField>
+
+<ResponseField name="scenario" type="string">
+  The attach scenario for this product: `new`, `upgrade`, `downgrade`, or `addon`
+</ResponseField>
+
+<ResponseField name="properties" type="object">
+  Computed properties about the product.
+  
+  <ResponseField name="is_free" type="boolean">
+    True if the product has no base price or usage prices.
+  </ResponseField>
+  
+  <ResponseField name="is_one_off" type="boolean">
+    True if the product only contains one-time pricing.
+  </ResponseField>
+  
+  <ResponseField name="interval_group" type="string">
+    The primary billing interval for the product.
+    
+    Example: `"month"`, `"year"`
+  </ResponseField>
+  
+  <ResponseField name="has_trial" type="boolean">
+    True if the product includes a free trial.
+  </ResponseField>
+  
+  <ResponseField name="updateable" type="boolean">
+    True if the product can be updated after customers have attached it.
+  </ResponseField>
+</ResponseField>
+
+## Response Example
+
+```json
+{
+  "id": "pro-plan",
+  "name": "Pro Plan",
+  "description": "Professional features for growing teams",
+  "group": "main-plans",
+  "env": "production",
+  "is_add_on": false,
+  "is_default": false,
+  "archived": false,
+  "version": 1,
+  "created_at": 1708298400000,
+  "items": [
+    {
+      "type": "price",
+      "feature_id": null,
+      "interval": "month",
+      "interval_count": 1,
+      "price": 29,
+      "display": {
+        "primary_text": "$29",
+        "secondary_text": "per month"
+      }
+    },
+    {
+      "type": "priced_feature",
+      "feature_id": "api-calls",
+      "included_usage": 10000,
+      "interval": "month",
+      "interval_count": 1,
+      "price": 0.01,
+      "usage_model": "pay_per_use",
+      "billing_units": 1000,
+      "reset_usage_when_enabled": true,
+      "display": {
+        "primary_text": "10,000 API Calls",
+        "secondary_text": "then $0.01 per 1,000 calls"
+      }
+    },
+    {
+      "type": "feature",
+      "feature_id": "advanced-analytics",
+      "display": {
+        "primary_text": "Advanced Analytics"
+      }
+    }
+  ],
+  "free_trial": {
+    "duration": "day",
+    "length": 14,
+    "card_required": true,
+    "unique_fingerprint": false
+  },
+  "base_variant_id": null,
+  "scenario": "new",
+  "properties": {
+    "is_free": false,
+    "is_one_off": false,
+    "interval_group": "month",
+    "has_trial": true,
+    "updateable": true
+  }
+}
+```
+
+## Use Cases
+
+### Display Product Information
+
+Retrieve product details to display in your pricing page or product selector:
+
+```javascript
+const product = await autumn.products.get('pro-plan');
+
+console.log(`${product.name}: ${product.description}`);
+console.log(`Price: ${product.items[0].price}/${product.items[0].interval}`);
+```
+
+### Check Feature Availability
+
+Determine what features are included in a product:
+
+```javascript
+const product = await autumn.products.get('pro-plan');
+
+const features = product.items
+  .filter(item => item.type === 'feature' || item.type === 'priced_feature')
+  .map(item => ({
+    id: item.feature_id,
+    included: item.included_usage,
+    unlimited: item.included_usage === 'infinite'
+  }));
+
+console.log('Available features:', features);
+```
+
+### Verify Product Configuration
+
+Check product settings before allowing customer actions:
+
+```javascript
+const product = await autumn.products.get('enterprise-tier');
+
+if (product.free_trial && product.free_trial.trial_available) {
+  console.log('Free trial available for', product.free_trial.length, 'days');
+} else {
+  console.log('No trial available');
+}
+
+if (product.is_add_on) {
+  console.log('This is an add-on and can be purchased multiple times');
+}
+```

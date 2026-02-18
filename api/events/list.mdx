@@ -1,0 +1,441 @@
+---
+title: "List Events"
+description: "Retrieve usage events for a customer or feature"
+---
+
+## Overview
+
+Retrieves a paginated list of usage events for a customer or feature. Events represent individual usage occurrences such as API calls, message sends, or credit consumption.
+
+## Endpoint
+
+```
+GET /v1/events
+```
+
+## Authentication
+
+Requires an API key in the Authorization header:
+
+```
+Authorization: Bearer your_api_key
+```
+
+## Query Parameters
+
+<ParamField query="customer_id" type="string">
+  Filter events by customer ID. Returns all events for this customer.
+</ParamField>
+
+<ParamField query="feature_id" type="string | array">
+  Filter events by feature ID. Can be a single feature ID or an array of feature IDs.
+</ParamField>
+
+<ParamField query="custom_range" type="object">
+  Filter events by time range using Unix timestamps (in milliseconds).
+  
+  <Expandable title="custom_range properties">
+    <ParamField query="custom_range.start" type="number">
+      Start timestamp in epoch milliseconds. Returns events after this time.
+    </ParamField>
+    
+    <ParamField query="custom_range.end" type="number">
+      End timestamp in epoch milliseconds. Returns events before this time.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField query="limit" type="number" default={100}>
+  Maximum number of events to return (1-1000)
+</ParamField>
+
+<ParamField query="offset" type="number" default={0}>
+  Number of events to skip for pagination
+</ParamField>
+
+## Response
+
+<ResponseField name="list" type="array">
+  Array of event objects
+  
+  <Expandable title="Event properties">
+    <ResponseField name="list[].id" type="string">
+      Event ID (KSUID format)
+    </ResponseField>
+    
+    <ResponseField name="list[].timestamp" type="number">
+      Event timestamp in epoch milliseconds
+    </ResponseField>
+    
+    <ResponseField name="list[].feature_id" type="string">
+      ID of the feature this event belongs to
+    </ResponseField>
+    
+    <ResponseField name="list[].customer_id" type="string">
+      Customer identifier
+    </ResponseField>
+    
+    <ResponseField name="list[].value" type="number">
+      Event value/count (e.g., number of API calls, credits used)
+    </ResponseField>
+    
+    <ResponseField name="list[].properties" type="object">
+      Event properties stored as JSONB. Can include custom metadata.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="total" type="number">
+  Total number of events matching the filters
+</ResponseField>
+
+<ResponseField name="has_more" type="boolean">
+  Whether there are more events beyond this page
+</ResponseField>
+
+<ResponseField name="offset" type="number">
+  The offset used for this request
+</ResponseField>
+
+<ResponseField name="limit" type="number">
+  The limit used for this request
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash curl (all events for customer)
+curl -X GET "https://api.useautumn.com/v1/events?customer_id=user_123" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```bash curl (by feature)
+curl -X GET "https://api.useautumn.com/v1/events?customer_id=user_123&feature_id=api_calls" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```bash curl (time range)
+curl -X GET "https://api.useautumn.com/v1/events?customer_id=user_123&custom_range[start]=1709251200000&custom_range[end]=1711843200000" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```bash curl (multiple features)
+curl -X GET "https://api.useautumn.com/v1/events?customer_id=user_123&feature_id=api_calls&feature_id=credits" \
+  -H "Authorization: Bearer sk_test_..."
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'sk_test_...'
+});
+
+// Get all events for a customer
+const result = await autumn.events.list({
+  customerId: 'user_123'
+});
+
+console.log(`Total events: ${result.total}`);
+console.log(result.list);
+```
+
+```javascript JavaScript SDK (with filters)
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'sk_test_...'
+});
+
+// Get events for a specific feature in a time range
+const result = await autumn.events.list({
+  customerId: 'user_123',
+  featureId: 'api_calls',
+  customRange: {
+    start: Date.now() - 7 * 24 * 60 * 60 * 1000, // Last 7 days
+    end: Date.now()
+  },
+  limit: 50
+});
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: process.env.AUTUMN_SECRET_KEY!
+});
+
+const result = await autumn.events.list({
+  customerId: 'user_123',
+  featureId: ['api_calls', 'credits'],
+  limit: 100
+});
+```
+
+```python Python
+import requests
+import time
+
+current_time = int(time.time() * 1000)
+week_ago = current_time - (7 * 24 * 60 * 60 * 1000)
+
+response = requests.get(
+    'https://api.useautumn.com/v1/events',
+    headers={
+        'Authorization': 'Bearer sk_test_...',
+    },
+    params={
+        'customer_id': 'user_123',
+        'feature_id': 'api_calls',
+        'custom_range[start]': week_ago,
+        'custom_range[end]': current_time
+    }
+)
+
+data = response.json()
+print(f"Total events: {data['total']}")
+```
+
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "list": [
+    {
+      "id": "evt_36xpk2TmuQX5zVPPQ8tCtnR5Weg",
+      "timestamp": 1765958215459,
+      "feature_id": "credits",
+      "customer_id": "0pCIbS4AMAFDB1iBMNhARWZt2gDtVwQx",
+      "value": 30,
+      "properties": {}
+    },
+    {
+      "id": "evt_36xmHxxjAkqxufDf9yHAPNfRrLM",
+      "timestamp": 1765956512057,
+      "feature_id": "credits",
+      "customer_id": "0pCIbS4AMAFDB1iBMNhARWZt2gDtVwQx",
+      "value": 49,
+      "properties": {}
+    }
+  ],
+  "total": 2,
+  "has_more": false,
+  "offset": 0,
+  "limit": 100
+}
+```
+
+## Use Cases
+
+### Display Usage History
+
+```javascript
+// Show recent usage events in your UI
+async function getRecentUsage(customerId, featureId) {
+  const result = await autumn.events.list({
+    customerId,
+    featureId,
+    limit: 20
+  });
+  
+  return result.list.map(event => ({
+    timestamp: new Date(event.timestamp),
+    amount: event.value,
+    properties: event.properties
+  }));
+}
+```
+
+### Calculate Usage for Period
+
+```javascript
+// Calculate total usage for the current month
+async function getCurrentMonthUsage(customerId, featureId) {
+  const now = Date.now();
+  const monthStart = new Date(now);
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  
+  const result = await autumn.events.list({
+    customerId,
+    featureId,
+    customRange: {
+      start: monthStart.getTime(),
+      end: now
+    }
+  });
+  
+  const totalUsage = result.list.reduce((sum, event) => sum + event.value, 0);
+  
+  return {
+    total: totalUsage,
+    eventCount: result.total,
+    period: 'month'
+  };
+}
+```
+
+### Export Usage Data
+
+```javascript
+// Export all events to CSV
+async function exportEventsToCSV(customerId) {
+  const allEvents = [];
+  let offset = 0;
+  const limit = 1000;
+  
+  while (true) {
+    const result = await autumn.events.list({
+      customerId,
+      limit,
+      offset
+    });
+    
+    allEvents.push(...result.list);
+    
+    if (!result.has_more) break;
+    offset += limit;
+  }
+  
+  const csv = allEvents.map(e => 
+    `${e.timestamp},${e.feature_id},${e.value},${JSON.stringify(e.properties)}`
+  ).join('\n');
+  
+  return `timestamp,feature_id,value,properties\n${csv}`;
+}
+```
+
+### Audit Trail
+
+```javascript
+// Get detailed audit trail for a specific time period
+async function getUsageAudit(customerId, startDate, endDate) {
+  const result = await autumn.events.list({
+    customerId,
+    customRange: {
+      start: startDate.getTime(),
+      end: endDate.getTime()
+    },
+    limit: 1000
+  });
+  
+  // Group by feature
+  const byFeature = result.list.reduce((acc, event) => {
+    if (!acc[event.feature_id]) {
+      acc[event.feature_id] = [];
+    }
+    acc[event.feature_id].push(event);
+    return acc;
+  }, {});
+  
+  // Calculate totals per feature
+  const summary = Object.entries(byFeature).map(([featureId, events]) => ({
+    featureId,
+    eventCount: events.length,
+    totalValue: events.reduce((sum, e) => sum + e.value, 0)
+  }));
+  
+  return {
+    events: result.list,
+    summary,
+    totalEvents: result.total
+  };
+}
+```
+
+### Real-time Monitoring
+
+```javascript
+// Get recent events for monitoring dashboard
+async function getRecentEvents(customerId, minutes = 5) {
+  const now = Date.now();
+  const startTime = now - (minutes * 60 * 1000);
+  
+  const result = await autumn.events.list({
+    customerId,
+    customRange: {
+      start: startTime,
+      end: now
+    }
+  });
+  
+  return {
+    events: result.list,
+    count: result.total,
+    period: `Last ${minutes} minutes`
+  };
+}
+```
+
+## Pagination
+
+For large event lists, use pagination:
+
+```javascript
+async function getAllEvents(customerId, featureId) {
+  const allEvents = [];
+  let offset = 0;
+  const limit = 100;
+  
+  while (true) {
+    const result = await autumn.events.list({
+      customerId,
+      featureId,
+      limit,
+      offset
+    });
+    
+    allEvents.push(...result.list);
+    
+    if (!result.has_more) break;
+    offset += limit;
+  }
+  
+  return allEvents;
+}
+```
+
+## Best Practices
+
+<Tip>
+  **Use time ranges**: Always specify `custom_range` when querying large datasets to improve performance and reduce response size.
+</Tip>
+
+<Tip>
+  **Filter by feature**: Narrow down results by specifying `feature_id` to get only relevant events.
+</Tip>
+
+<Info>
+  Event IDs use KSUID format, which is lexicographically sortable by creation time. The newest events appear first in the list.
+</Info>
+
+<Tip>
+  **Pagination**: For customers with high usage, use pagination with appropriate `limit` and `offset` values to avoid timeouts.
+</Tip>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Aggregate Events" icon="chart-bar" href="/api/events/aggregate">
+    Get aggregated event data with time bins
+  </Card>
+  <Card title="Track Usage" icon="plus" href="/api/track">
+    Create a new usage event
+  </Card>
+  <Card title="Check Access" icon="shield-check" href="/api/check">
+    Check current usage and limits
+  </Card>
+  <Card title="Query Billing" icon="file-invoice-dollar" href="/api/query">
+    Get billing information
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Usage-based Billing Guide](/guides/usage-based-billing)
+- [Features Concept](/concepts/features)
+- [Track Endpoint](/api/track)

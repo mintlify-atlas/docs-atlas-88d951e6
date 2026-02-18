@@ -1,0 +1,678 @@
+---
+title: Entities
+description: Learn about entities for seat-based and per-resource pricing in Autumn
+---
+
+# Entities
+
+Entities represent individual resources within a customer account that you want to bill or meter separately. They're essential for seat-based pricing, workspace limits, and per-resource billing.
+
+## What is an Entity?
+
+An entity is a trackable resource that belongs to a customer:
+- **Team members** (seats)
+- **Workspaces** or **projects**
+- **API keys**
+- **Devices** or **machines**
+- **Stores** or **locations**
+
+<Info>
+Think of entities as the "things" you're counting. For seat-based pricing, entities are the seats. For workspace limits, entities are the workspaces.
+</Info>
+
+## Entity Schema
+
+From `source/shared/models/cusModels/entityModels/entityModels.ts:4`, here's the entity structure:
+
+```typescript
+{
+  // Identity
+  id: string,                    // Your entity ID (e.g., "user_456")
+  name: string,                  // Entity name (e.g., "Bob Smith")
+  
+  // Relationships
+  internal_customer_id: string,  // Which customer owns this
+  internal_feature_id: string,   // Which feature this counts toward
+  feature_id: string,            // Feature ID (e.g., "team_seats")
+  
+  // State
+  deleted: boolean,              // Soft delete
+  
+  // Internal
+  internal_id: string,
+  org_id: string,
+  env: "development" | "production",
+  created_at: number
+}
+```
+
+## Why Use Entities?
+
+Entities enable sophisticated pricing models:
+
+### Without Entities
+
+```typescript
+// Simple usage tracking
+await autumn.track({
+  customerId: "team_123",
+  featureId: "team_seats",
+  value: 5  // 5 seats used
+});
+```
+
+**Problems**:
+- Can't identify which specific seats
+- Can't bill per seat
+- Can't track seat-level usage
+- Can't handle seat-specific limits
+
+### With Entities
+
+```typescript
+// Create entity for each seat
+await autumn.createEntity({
+  customerId: "team_123",
+  featureId: "team_seats",
+  entityId: "user_456",
+  name: "Bob Smith"
+});
+```
+
+**Benefits**:
+- Track each seat individually
+- Bill per active seat
+- Apply per-seat usage limits
+- Remove specific seats when members leave
+
+## Creating Entities
+
+### Basic Entity
+
+```typescript
+await autumn.createEntity({
+  customerId: "team_123",
+  featureId: "team_seats",
+  entityId: "user_456",
+  name: "Alice Johnson"
+});
+```
+
+### Multiple Entities
+
+```typescript
+// Add multiple team members
+const members = [
+  { id: "user_456", name: "Alice Johnson" },
+  { id: "user_789", name: "Bob Smith" },
+  { id: "user_101", name: "Charlie Brown" }
+];
+
+for (const member of members) {
+  await autumn.createEntity({
+    customerId: "team_123",
+    featureId: "team_seats",
+    entityId: member.id,
+    name: member.name
+  });
+}
+```
+
+<Tip>
+Use your internal resource IDs as entity IDs. This makes it easy to sync entities with your database.
+</Tip>
+
+## Entity-based Features
+
+To use entities, create a feature and reference it in plan items:
+
+### 1. Create Feature
+
+```typescript
+// Create the feature that entities count toward
+const feature = {
+  id: "team_seats",
+  name: "Team Seats",
+  type: "metered",
+  config: {
+    usage_type: "continuous_use",
+    aggregate: { type: "sum", property: null }
+  },
+  display: {
+    singular: "seat",
+    plural: "seats"
+  }
+};
+```
+
+### 2. Add to Plan
+
+```typescript
+// Plan includes 5 seats, $15/month per additional seat
+const plan = {
+  id: "team-plan",
+  name: "Team Plan",
+  price: {
+    amount: 4900,  // $49 base price
+    interval: "month"
+  },
+  items: [
+    {
+      feature_id: "team_seats",
+      included: 5,            // 5 seats included
+      entity_feature_id: "team_seats",  // Enable entity tracking
+      price: {
+        amount: 1500,         // $15 per additional seat
+        interval: "month",
+        billing_units: 1,
+        billing_method: "per_unit"
+      }
+    }
+  ]
+};
+```
+
+<Note>
+Set `entity_feature_id` in the plan item to enable entity tracking. This tells Autumn to count entities instead of usage events.
+</Note>
+
+### 3. Create Entities
+
+```typescript
+// Add team members (entities)
+await autumn.createEntity({
+  customerId: "team_123",
+  featureId: "team_seats",
+  entityId: "user_456",
+  name: "Alice"
+});
+
+await autumn.createEntity({
+  customerId: "team_123",
+  featureId: "team_seats",
+  entityId: "user_789",
+  name: "Bob"
+});
+```
+
+## Checking Entity Limits
+
+Use `/check` to verify entity limits:
+
+```typescript
+const { data } = await autumn.check({
+  customerId: "team_123",
+  featureId: "team_seats"
+});
+
+console.log(data.limit);     // 5 (included seats)
+console.log(data.usage);     // 2 (current entities)
+console.log(data.remaining); // 3 (available seats)
+console.log(data.allowed);   // true (under limit)
+```
+
+### Before Adding Entity
+
+```typescript
+async function addTeamMember(teamId: string, userId: string) {
+  // Check if seats available
+  const { data } = await autumn.check({
+    customerId: teamId,
+    featureId: "team_seats"
+  });
+  
+  if (!data.allowed || data.remaining === 0) {
+    throw new Error("No seats available. Please upgrade your plan.");
+  }
+  
+  // Add member to database
+  await db.addTeamMember(teamId, userId);
+  
+  // Create entity
+  await autumn.createEntity({
+    customerId: teamId,
+    featureId: "team_seats",
+    entityId: userId,
+    name: user.name
+  });
+}
+```
+
+## Removing Entities
+
+Delete entities when resources are removed:
+
+```typescript
+// Remove team member
+await autumn.deleteEntity({
+  customerId: "team_123",
+  featureId: "team_seats",
+  entityId: "user_456"
+});
+```
+
+<Info>
+Deleting an entity immediately frees up a seat and adjusts billing for the next cycle. Autumn handles proration automatically.
+</Info>
+
+### Soft Delete
+
+Entities are soft-deleted by default (set `deleted: true`). They remain in the database for billing history:
+
+```typescript
+{
+  id: "user_456",
+  name: "Alice Johnson",
+  deleted: true,  // Soft deleted
+  internal_customer_id: "...",
+  feature_id: "team_seats"
+}
+```
+
+## Listing Entities
+
+```typescript
+// List all entities for a customer/feature
+const { data } = await autumn.listEntities({
+  customerId: "team_123",
+  featureId: "team_seats"
+});
+
+console.log(data.entities);
+// [
+//   { id: "user_456", name: "Alice", deleted: false },
+//   { id: "user_789", name: "Bob", deleted: false },
+//   { id: "user_101", name: "Charlie", deleted: true }
+// ]
+```
+
+## Entity-based Billing
+
+Entities automatically trigger billing when they exceed included limits:
+
+### Example: Seat-based Plan
+
+**Plan**: $49/month for 5 seats, $15/month per additional seat
+
+```typescript
+// Customer has 7 team members (entities)
+// Billing: $49 (base) + $30 (2 extra seats) = $79/month
+```
+
+### How it Works
+
+1. Customer attaches plan with 5 included seats
+2. Create entities for team members 1-5: No extra charge
+3. Create entity for team member 6: +$15/month
+4. Create entity for team member 7: +$15/month (total +$30)
+5. Delete entity for team member 6: -$15/month (prorated)
+
+<Tip>
+Autumn automatically updates Stripe subscriptions when entities are added/removed. You don't need to manage this manually.
+</Tip>
+
+## Real-world Examples
+
+### Team Seats
+
+```typescript
+// Feature definition
+const seatsFeature = {
+  id: "team_seats",
+  name: "Team Seats",
+  type: "metered",
+  config: {
+    usage_type: "continuous_use",
+    aggregate: { type: "sum", property: null }
+  }
+};
+
+// Plan definition
+const teamPlan = {
+  id: "team-plan",
+  name: "Team Plan",
+  price: { amount: 4900, interval: "month" },
+  items: [
+    {
+      feature_id: "team_seats",
+      included: 5,
+      entity_feature_id: "team_seats",
+      price: {
+        amount: 1500,
+        interval: "month",
+        billing_units: 1,
+        billing_method: "per_unit"
+      }
+    }
+  ]
+};
+
+// Add team member
+async function addMember(teamId: string, userId: string, userName: string) {
+  // Check limit
+  const { data } = await autumn.check({
+    customerId: teamId,
+    featureId: "team_seats"
+  });
+  
+  if (data.remaining === 0) {
+    // Offer upgrade
+    return {
+      success: false,
+      message: `Seat limit reached (${data.limit} seats). Upgrade to add more members.`,
+      upgrade_url: `/billing/upgrade`
+    };
+  }
+  
+  // Add to database
+  await db.teams.addMember(teamId, userId);
+  
+  // Create entity
+  await autumn.createEntity({
+    customerId: teamId,
+    featureId: "team_seats",
+    entityId: userId,
+    name: userName
+  });
+  
+  return { success: true };
+}
+
+// Remove team member
+async function removeMember(teamId: string, userId: string) {
+  // Remove from database
+  await db.teams.removeMember(teamId, userId);
+  
+  // Delete entity
+  await autumn.deleteEntity({
+    customerId: teamId,
+    featureId: "team_seats",
+    entityId: userId
+  });
+  
+  return { success: true };
+}
+```
+
+### Workspace Limits
+
+```typescript
+// Feature for workspaces
+const workspacesFeature = {
+  id: "workspaces",
+  name: "Workspaces",
+  type: "metered",
+  config: {
+    usage_type: "continuous_use",
+    aggregate: { type: "sum", property: null }
+  }
+};
+
+// Pro plan: 10 workspaces included
+const proPlan = {
+  id: "pro-plan",
+  items: [
+    {
+      feature_id: "workspaces",
+      included: 10,
+      unlimited: false,
+      entity_feature_id: "workspaces"
+    }
+  ]
+};
+
+// Create workspace
+async function createWorkspace(userId: string, name: string) {
+  const { data } = await autumn.check({
+    customerId: userId,
+    featureId: "workspaces"
+  });
+  
+  if (data.remaining === 0) {
+    throw new Error("Workspace limit reached");
+  }
+  
+  // Create in database
+  const workspace = await db.workspaces.create({ name, ownerId: userId });
+  
+  // Create entity
+  await autumn.createEntity({
+    customerId: userId,
+    featureId: "workspaces",
+    entityId: workspace.id,
+    name: workspace.name
+  });
+  
+  return workspace;
+}
+
+// Delete workspace
+async function deleteWorkspace(userId: string, workspaceId: string) {
+  await db.workspaces.delete(workspaceId);
+  
+  await autumn.deleteEntity({
+    customerId: userId,
+    featureId: "workspaces",
+    entityId: workspaceId
+  });
+}
+```
+
+### API Keys with Per-key Limits
+
+```typescript
+// Feature for API keys
+const apiKeysFeature = {
+  id: "api_keys",
+  name: "API Keys",
+  type: "metered",
+  config: {
+    usage_type: "continuous_use",
+    aggregate: { type: "sum", property: null }
+  }
+};
+
+// Feature for API calls per key
+const apiCallsFeature = {
+  id: "api_calls_per_key",
+  name: "API Calls per Key",
+  type: "metered",
+  config: {
+    usage_type: "single_use",
+    aggregate: { type: "sum", property: null }
+  }
+};
+
+// Create API key
+async function createApiKey(userId: string, name: string) {
+  const { data } = await autumn.check({
+    customerId: userId,
+    featureId: "api_keys"
+  });
+  
+  if (data.remaining === 0) {
+    throw new Error("API key limit reached");
+  }
+  
+  // Generate key
+  const apiKey = generateApiKey();
+  await db.apiKeys.create({ key: apiKey, name, userId });
+  
+  // Create entity
+  await autumn.createEntity({
+    customerId: userId,
+    featureId: "api_keys",
+    entityId: apiKey,
+    name
+  });
+  
+  return apiKey;
+}
+
+// Track usage per key
+async function handleApiRequest(apiKey: string) {
+  const key = await db.apiKeys.findByKey(apiKey);
+  
+  // Track usage for this specific entity
+  await autumn.track({
+    customerId: key.userId,
+    featureId: "api_calls_per_key",
+    entityId: apiKey,  // Track per entity
+    value: 1
+  });
+}
+```
+
+### Store/Location Pricing
+
+```typescript
+// Retail SaaS: charge per store location
+const storesFeature = {
+  id: "store_locations",
+  name: "Store Locations",
+  type: "metered",
+  config: {
+    usage_type: "continuous_use",
+    aggregate: { type: "sum", property: null }
+  }
+};
+
+const retailPlan = {
+  id: "retail-plan",
+  name: "Retail Plan",
+  price: { amount: 9900, interval: "month" },
+  items: [
+    {
+      feature_id: "store_locations",
+      included: 1,  // 1 location included
+      entity_feature_id: "store_locations",
+      price: {
+        amount: 4900,  // $49 per additional location
+        interval: "month",
+        billing_units: 1,
+        billing_method: "per_unit"
+      }
+    }
+  ]
+};
+
+// Add store location
+async function addStore(companyId: string, storeData: any) {
+  const store = await db.stores.create(storeData);
+  
+  await autumn.createEntity({
+    customerId: companyId,
+    featureId: "store_locations",
+    entityId: store.id,
+    name: store.name
+  });
+  
+  // Company is billed $49/month for this location
+  return store;
+}
+```
+
+## Entities vs Usage Tracking
+
+When to use entities vs simple usage tracking:
+
+| Scenario | Use Entities | Use Usage Tracking |
+|----------|--------------|--------------------|
+| Team seats | ✅ | ❌ |
+| Workspaces/Projects | ✅ | ❌ |
+| API keys | ✅ | ❌ |
+| Store locations | ✅ | ❌ |
+| Devices/Machines | ✅ | ❌ |
+| API calls | ❌ | ✅ |
+| Storage (GB) | ❌ | ✅ |
+| Bandwidth | ❌ | ✅ |
+| Email sends | ❌ | ✅ |
+| Credits | ❌ | ✅ |
+
+<Tip>
+Use entities when you need to:
+- Bill per resource
+- Track individual resources
+- Remove specific resources
+- Apply per-resource limits
+
+Use usage tracking for:
+- Aggregate consumption
+- Countable events
+- Bulk operations
+</Tip>
+
+## Entity Billing Mechanics
+
+### Proration
+
+When entities are added/removed mid-cycle, Autumn prorates charges:
+
+```typescript
+// Day 1: Customer on $49/month plan (5 seats included)
+// Day 15: Add 6th seat (+$15/month)
+// Charge: ~$7.50 (15 days of $15/month)
+
+// Day 20: Remove 6th seat
+// Credit: ~$5 (10 days of $15/month credited to next invoice)
+```
+
+### Billing Updates
+
+Entity changes update Stripe subscriptions in real-time:
+
+```typescript
+// Create entity
+await autumn.createEntity({
+  customerId: "team_123",
+  featureId: "team_seats",
+  entityId: "user_456",
+  name: "Alice"
+});
+// → Stripe subscription updated immediately
+// → Prorated charge added to invoice
+// → Customer billed for additional seat
+```
+
+<Info>
+Autumn uses Stripe's proration features to ensure fair billing when entities are added or removed during a billing period.
+</Info>
+
+## Best Practices
+
+<Tip>
+**Sync with your database**: Create/delete entities whenever you create/delete resources in your database. Keep them in sync.
+</Tip>
+
+<Tip>
+**Use resource IDs**: Set `entityId` to your internal resource ID (user ID, workspace ID, etc.) for easy tracking.
+</Tip>
+
+<Tip>
+**Check before creating**: Always call `check()` before creating entities to enforce limits and show upgrade prompts.
+</Tip>
+
+<Note>
+**Set entity_feature_id**: Don't forget to set `entity_feature_id` in your plan items to enable entity tracking.
+</Note>
+
+<Tip>
+**Descriptive names**: Use clear entity names that help customers understand what they're paying for (e.g., "Alice Johnson" not "user_456").
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Seat-based Pricing Guide" icon="users" href="/guides/seat-based-pricing">
+    Complete guide to implementing seat-based pricing
+  </Card>
+  <Card title="Entities API" icon="code" href="/api/entities/create">
+    Create and manage entities via API
+  </Card>
+  <Card title="Features" icon="puzzle-piece" href="/concepts/features">
+    Learn about feature types
+  </Card>
+  <Card title="Pricing Models" icon="dollar-sign" href="/concepts/pricing-models">
+    Explore all pricing models
+  </Card>
+</CardGroup>

@@ -1,0 +1,279 @@
+---
+title: 'Create Feature'
+description: 'Create a new feature to track usage and control access'
+---
+
+# Create Feature
+
+Create a new feature (also called a plan item) in your Autumn account. Features are the building blocks of your plans and can be boolean flags, metered usage, or credit systems.
+
+<Note>
+Feature IDs must be unique within your organization and environment. Use descriptive IDs like `api_calls` or `storage_gb`.
+</Note>
+
+## Endpoint
+
+```
+POST /features
+```
+
+## Request Body
+
+<ParamField body="id" type="string" required>
+  The unique identifier for the feature. Must match the regex pattern for valid IDs.
+  
+  **Example:** `api_calls`, `team_seats`, `storage_gb`
+</ParamField>
+
+<ParamField body="name" type="string">
+  The human-readable name of the feature.
+  
+  **Example:** `API Calls`, `Team Seats`, `Storage`
+</ParamField>
+
+<ParamField body="type" type="enum" required>
+  The type of feature. Determines how usage is tracked and billed.
+  
+  **Options:**
+  - `boolean` - Simple on/off access control
+  - `single_use` - Consumable resources (API calls, tokens, credits)
+  - `continuous_use` - Allocated resources (seats, storage, workspaces)
+  - `credit_system` - Unified credit pool for multiple features
+  
+  **Example:** `single_use`
+</ParamField>
+
+<ParamField body="consumable" type="boolean">
+  Whether the feature is consumable. Required for `single_use` and `continuous_use` types.
+  
+  - `true` - Usage is consumed and decrements (e.g., API tokens, credits)
+  - `false` - Usage is allocated and doesn't decrement (e.g., seats, storage)
+  
+  <Info>
+  Credit system features must always be consumable (`true`).
+  </Info>
+</ParamField>
+
+<ParamField body="display" type="object">
+  Display names for the feature in your UI.
+  
+  <Expandable title="Display Object">
+    <ParamField body="display.singular" type="string">
+      Singular form of the feature name.
+      
+      **Example:** `API call`, `seat`, `GB`
+    </ParamField>
+    
+    <ParamField body="display.plural" type="string">
+      Plural form of the feature name.
+      
+      **Example:** `API calls`, `seats`, `GB`
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="event_names" type="array">
+  Array of event names that trigger usage tracking for this feature.
+  
+  **Example:** `["api.request", "api.call"]`
+</ParamField>
+
+<ParamField body="credit_schema" type="array">
+  Credit cost schema for credit system features. Required when `type` is `credit_system`.
+  
+  <Expandable title="Credit Schema Array">
+    <ParamField body="credit_schema[].metered_feature_id" type="string" required>
+      The ID of a metered feature (must be `single_use` type).
+    </ParamField>
+    
+    <ParamField body="credit_schema[].credit_cost" type="number" required>
+      The credit cost per unit of the metered feature.
+      
+      **Example:** If `credit_cost` is 10, using 1 unit of the metered feature consumes 10 credits.
+    </ParamField>
+  </Expandable>
+  
+  <Warning>
+  Credit schema can only reference `single_use` metered features. Create those features first.
+  </Warning>
+</ParamField>
+
+## Response
+
+Returns the created feature object.
+
+<ResponseField name="id" type="string">
+  The unique identifier of the feature.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The name of the feature.
+</ResponseField>
+
+<ResponseField name="type" type="enum">
+  The feature type: `boolean`, `single_use`, `continuous_use`, or `credit_system`.
+</ResponseField>
+
+<ResponseField name="consumable" type="boolean">
+  Whether the feature is consumable.
+</ResponseField>
+
+<ResponseField name="display" type="object">
+  Display names for the feature.
+  
+  <Expandable title="Display Object">
+    <ResponseField name="singular" type="string">
+      Singular display name.
+    </ResponseField>
+    
+    <ResponseField name="plural" type="string">
+      Plural display name.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="event_names" type="array">
+  Event names that trigger usage tracking.
+</ResponseField>
+
+<ResponseField name="credit_schema" type="array">
+  Credit cost mapping for credit system features.
+  
+  <Expandable title="Credit Schema">
+    <ResponseField name="metered_feature_id" type="string">
+      The metered feature ID.
+    </ResponseField>
+    
+    <ResponseField name="credit_cost" type="number">
+      The credit cost per unit.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="archived" type="boolean">
+  Whether the feature is archived.
+</ResponseField>
+
+## Examples
+
+### Boolean Feature
+
+Create a simple on/off feature flag:
+
+```json
+{
+  "id": "priority_support",
+  "name": "Priority Support",
+  "type": "boolean",
+  "display": {
+    "singular": "Priority Support",
+    "plural": "Priority Support"
+  }
+}
+```
+
+### Single Use Feature (API Calls)
+
+Create a consumable metered feature:
+
+```json
+{
+  "id": "api_calls",
+  "name": "API Calls",
+  "type": "single_use",
+  "consumable": true,
+  "event_names": ["api.request"],
+  "display": {
+    "singular": "API call",
+    "plural": "API calls"
+  }
+}
+```
+
+### Continuous Use Feature (Team Seats)
+
+Create an allocated resource feature:
+
+```json
+{
+  "id": "team_seats",
+  "name": "Team Seats",
+  "type": "continuous_use",
+  "consumable": false,
+  "event_names": ["team.member_added"],
+  "display": {
+    "singular": "seat",
+    "plural": "seats"
+  }
+}
+```
+
+### Credit System Feature
+
+Create a unified credit pool that maps to multiple features:
+
+```json
+{
+  "id": "ai_credits",
+  "name": "AI Credits",
+  "type": "credit_system",
+  "consumable": true,
+  "credit_schema": [
+    {
+      "metered_feature_id": "gpt4_requests",
+      "credit_cost": 10
+    },
+    {
+      "metered_feature_id": "gpt35_requests",
+      "credit_cost": 2
+    },
+    {
+      "metered_feature_id": "image_generation",
+      "credit_cost": 5
+    }
+  ],
+  "display": {
+    "singular": "credit",
+    "plural": "credits"
+  }
+}
+```
+
+<Note>
+Before creating a credit system feature, ensure all referenced metered features already exist.
+</Note>
+
+## Validation Rules
+
+<Warning>
+The following validation rules apply:
+
+1. For `single_use` and `continuous_use` types, `consumable` field is required
+2. For `credit_system` type, `credit_schema` is required and feature must be consumable
+3. Feature IDs must match the allowed regex pattern (alphanumeric, underscores, hyphens)
+4. Credit schema can only reference existing `single_use` features
+</Warning>
+
+## Response Codes
+
+- `200` - Feature created successfully
+- `400` - Invalid request (validation error)
+- `401` - Unauthorized (invalid API key)
+- `409` - Feature ID already exists
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Add to Plan" icon="layer-group" href="/api/plans/create">
+    Include the feature in a plan
+  </Card>
+  <Card title="Track Usage" icon="chart-line" href="/api/track">
+    Record feature usage events
+  </Card>
+  <Card title="Check Access" icon="check" href="/api/check">
+    Verify customer access to the feature
+  </Card>
+  <Card title="Feature Concepts" icon="book" href="/concepts/features">
+    Learn more about feature types
+  </Card>
+</CardGroup>

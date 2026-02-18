@@ -1,0 +1,209 @@
+---
+title: "Welcome to Autumn"
+description: "Open-source billing infrastructure that sits between Stripe and your application"
+---
+
+<img
+  className="block dark:hidden"
+  src="/images/hero-light.png"
+  alt="Autumn Hero Light"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.png"
+  alt="Autumn Hero Dark"
+/>
+
+## What is Autumn?
+
+Autumn is an open-source layer between Stripe and your application that allows you to create any pricing model and embed it with just a few lines of code. Build subscription systems, credit-based models, usage-based billing, and custom enterprise plans without handling webhooks, upgrades, downgrades, or payment failures.
+
+<CardGroup cols={2}>
+  <Card
+    title="Quick Start"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Get up and running with Autumn in under 5 minutes
+  </Card>
+  <Card
+    title="Self-Hosting Guide"
+    icon="server"
+    href="/self-hosting"
+  >
+    Deploy Autumn on your own infrastructure
+  </Card>
+  <Card
+    title="Core Concepts"
+    icon="book"
+    href="/concepts/products"
+  >
+    Understand products, plans, features, and pricing models
+  </Card>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api/attach"
+  >
+    Explore the complete API documentation
+  </Card>
+</CardGroup>
+
+## Why Autumn?
+
+<AccordionGroup>
+  <Accordion title="Billing infrastructure gets complex fast" icon="wrench">
+    Building billing is more than just payments. You need:
+    - Permission management and feature gating
+    - Usage metering and limit enforcement
+    - Complex state management for upgrades, downgrades, and cancellations
+    - Handling race conditions and edge cases
+    - Managing failed payments and retry logic
+    
+    All of this complexity slows down product development and creates maintenance burden.
+  </Accordion>
+
+  <Accordion title="Billing and app logic should be decoupled" icon="layer-group">
+    Growing companies iterate on pricing frequently:
+    - Raising prices for new customers
+    - Experimenting with credit systems
+    - Charging for new features
+    - Offering custom enterprise plans
+    
+    Without proper separation, each change requires database migrations, rebuilding in-app flows, and managing grandfathering logic.
+  </Accordion>
+
+  <Accordion title="One API for all pricing models" icon="bolt">
+    Instead of custom code for each pricing strategy, Autumn provides a unified interface. Configure your pricing in the dashboard, then use the same three functions regardless of your model:
+    - `attach()` - Handle all purchase flows
+    - `check()` - Verify feature access
+    - `track()` - Record usage events
+  </Accordion>
+</AccordionGroup>
+
+## Simplify billing with 3 functions
+
+All your billing logic can be implemented through just three functions:
+
+### 1. Attach - Handle all purchase flows
+
+One function call for subscriptions, upgrades, downgrades, and purchases. Autumn returns a Stripe Checkout URL for new customers or handles the change immediately for existing ones.
+
+```tsx
+import { useCustomer } from "autumn-js/react";
+
+function UpgradeButton() {
+  const { attach } = useCustomer();
+  
+  return (
+    <button
+      onClick={async () => {
+        await attach({ productId: "pro" });
+      }}
+    >
+      Upgrade to Pro
+    </button>
+  );
+}
+```
+
+### 2. Check - Verify feature access
+
+Check whether a customer has access to a product, feature, or has remaining usage before allowing an action.
+
+```ts
+import { useCustomer } from "autumn-js/react";
+
+const { check } = useCustomer();
+
+const { data } = await check({ featureId: "ai_tokens" });
+
+if (!data.allowed) {
+  alert("AI limit reached");
+}
+```
+
+### 3. Track - Record usage events
+
+When a customer uses a metered feature, record the usage event. Autumn automatically enforces limits and calculates billing.
+
+```ts
+import { useCustomer } from "autumn-js/react";
+
+const { track } = useCustomer();
+
+await track({
+  featureId: "ai_tokens",
+  value: 1312
+});
+```
+
+## Supported pricing models
+
+<CardGroup cols={2}>
+  <Card title="Usage-based billing" icon="chart-line">
+    Set real-time usage limits with automatic resets. Charge users when they exceed their quota.
+  </Card>
+  <Card title="Credit systems" icon="coins">
+    Users can access monetary or arbitrary credits that multiple features can draw from.
+  </Card>
+  <Card title="Seat-based pricing" icon="users">
+    Bill customers based on the number of users or other entities with per-seat limits.
+  </Card>
+  <Card title="Prepaid packages" icon="box">
+    Let users purchase a fixed quantity of a feature upfront, which depletes over time.
+  </Card>
+  <Card title="Subscriptions" icon="repeat">
+    Traditional recurring billing with monthly or annual plans.
+  </Card>
+  <Card title="Custom enterprise" icon="building">
+    Create one-off pricing for large customers without code changes.
+  </Card>
+</CardGroup>
+
+## Key features
+
+<Steps>
+  <Step title="Dashboard-driven configuration">
+    Create and modify products, plans, and pricing models through an intuitive UI. No code changes required to iterate on pricing.
+  </Step>
+  
+  <Step title="Stripe integration">
+    Built on top of Stripe for payments. Autumn handles the complexity while you keep full control of your Stripe data.
+  </Step>
+  
+  <Step title="Real-time usage tracking">
+    Track feature usage in real-time with automatic limit enforcement. Works with any metering strategy.
+  </Step>
+  
+  <Step title="Flexible deployment">
+    Use our hosted cloud service or self-host on your own infrastructure. Both options supported.
+  </Step>
+  
+  <Step title="Open source">
+    Full source code available on GitHub. Extend, customize, and contribute back to the project.
+  </Step>
+</Steps>
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card
+    title="Cloud (Fastest)"
+    icon="cloud"
+    href="https://app.useautumn.com"
+  >
+    Sign up for our hosted service and start building in minutes
+  </Card>
+  <Card
+    title="Self-hosted"
+    icon="download"
+    href="/self-hosting"
+    >
+    Deploy Autumn on your own infrastructure with full control
+  </Card>
+</CardGroup>
+
+<Note>
+  **Need help?** Join our [Discord community](https://discord.gg/53emPtY9tA) or email us at hey@useautumn.com
+</Note>

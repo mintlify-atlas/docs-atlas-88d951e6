@@ -1,0 +1,580 @@
+---
+title: "Webhooks"
+description: "Handle Autumn webhooks to react to billing events in real-time"
+---
+
+## Overview
+
+Autumn sends webhooks via [Svix](https://www.svix.com/) to notify your application about important billing events. Use webhooks to:
+
+- Update your database when subscriptions change
+- Send notification emails to customers
+- Sync billing data to analytics platforms
+- Trigger internal workflows
+
+<Tip>
+Autumn uses Svix for reliable webhook delivery with automatic retries, signature verification, and a beautiful dashboard for debugging.
+</Tip>
+
+## Setting Up Webhooks
+
+<Steps>
+  <Step title="Configure webhook endpoint in Autumn dashboard">
+    Navigate to your Autumn dashboard and add your webhook URL.
+
+    ```
+    https://api.example.com/webhooks/autumn
+    ```
+  </Step>
+
+  <Step title="Create webhook handler endpoint">
+    Set up an endpoint in your application to receive webhooks.
+
+    ```typescript
+    app.post("/webhooks/autumn", async (req, res) => {
+      const payload = req.body;
+      const signature = req.headers["svix-signature"];
+      
+      // Verify and process webhook
+      await handleAutumnWebhook(payload, signature);
+      
+      res.status(200).json({ received: true });
+    });
+    ```
+  </Step>
+
+  <Step title="Verify webhook signatures">
+    Always verify webhooks are from Autumn using Svix signatures.
+
+    ```typescript
+    import { Webhook } from "svix";
+
+    const webhook = new Webhook(process.env.AUTUMN_WEBHOOK_SECRET);
+
+    function verifyWebhook(payload, signature) {
+      try {
+        return webhook.verify(payload, signature);
+      } catch (error) {
+        throw new Error("Invalid webhook signature");
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Handle events">
+    Process different event types based on your needs.
+
+    ```typescript
+    async function handleAutumnWebhook(payload, signature) {
+      const event = verifyWebhook(payload, signature);
+      
+      switch (event.type) {
+        case "customer.products.updated":
+          await handleProductUpdate(event.data);
+          break;
+        case "customer.usage.recorded":
+          await handleUsageRecorded(event.data);
+          break;
+        // Handle other events...
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Webhook Events
+
+### customer.products.updated
+
+Sent when a customer's product subscription changes.
+
+**Scenarios:**
+- `new`: Customer subscribed to a new product
+- `upgrade`: Customer upgraded to a higher-tier plan
+- `downgrade`: Customer downgraded to a lower-tier plan
+- `cancel`: Customer canceled their subscription
+
+**Payload:**
+```json
+{
+  "type": "customer.products.updated",
+  "data": {
+    "scenario": "upgrade",
+    "customer": {
+      "id": "customer_123",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "products": [...],
+      "features": {...}
+    },
+    "updated_product": {
+      "product_id": "pro-monthly",
+      "status": "active",
+      "price": 30,
+      "current_period_start": "2026-02-18T00:00:00Z",
+      "current_period_end": "2026-03-18T00:00:00Z"
+    }
+  }
+}
+```
+
+**Handler example:**
+```typescript
+async function handleProductUpdate(data) {
+  const { scenario, customer, updated_product } = data;
+  
+  // Update database
+  await db.customers.update({
+    where: { id: customer.id },
+    data: {
+      planId: updated_product.product_id,
+      planStatus: updated_product.status
+    }
+  });
+  
+  // Send notification
+  if (scenario === "upgrade") {
+    await sendEmail(customer.email, {
+      subject: "Welcome to Pro!",
+      body: `Your upgrade to ${updated_product.product_id} is now active.`
+    });
+  } else if (scenario === "cancel") {
+    await sendEmail(customer.email, {
+      subject: "Subscription Canceled",
+      body: `Your subscription will end on ${updated_product.current_period_end}`
+    });
+  }
+}
+```
+
+### customer.usage.recorded
+
+Sent when usage is tracked for a customer.
+
+**Payload:**
+```json
+{
+  "type": "customer.usage.recorded",
+  "data": {
+    "customer_id": "customer_123",
+    "feature_id": "api_calls",
+    "value": 100,
+    "balance": {
+      "current_balance": 900,
+      "usage": 100,
+      "granted_balance": 1000
+    },
+    "timestamp": "2026-02-18T12:34:56Z"
+  }
+}
+```
+
+**Handler example:**
+```typescript
+async function handleUsageRecorded(data) {
+  const { customer_id, feature_id, value, balance } = data;
+  
+  // Track in analytics
+  await analytics.track({
+    userId: customer_id,
+    event: "Usage Recorded",
+    properties: {
+      feature: feature_id,
+      amount: value,
+      remaining: balance.current_balance
+    }
+  });
+  
+  // Alert if balance is low
+  const usagePercent = (balance.usage / balance.granted_balance) * 100;
+  if (usagePercent > 80) {
+    await sendLowBalanceAlert(customer_id, feature_id, balance.current_balance);
+  }
+}
+```
+
+### customer.entity.created
+
+Sent when a new entity is created for a customer.
+
+**Payload:**
+```json
+{
+  "type": "customer.entity.created",
+  "data": {
+    "customer_id": "customer_123",
+    "entity": {
+      "id": "workspace_456",
+      "name": "Sales Team",
+      "feature_id": "workspaces",
+      "created_at": "2026-02-18T12:00:00Z"
+    }
+  }
+}
+```
+
+### customer.invoice.created
+
+Sent when an invoice is created for a customer.
+
+**Payload:**
+```json
+{
+  "type": "customer.invoice.created",
+  "data": {
+    "customer_id": "customer_123",
+    "invoice": {
+      "id": "inv_789",
+      "amount": 3000,
+      "currency": "usd",
+      "status": "open",
+      "due_date": "2026-03-18T00:00:00Z"
+    }
+  }
+}
+```
+
+## Webhook Verification
+
+### Using Svix SDK
+
+```typescript
+import { Webhook } from "svix";
+
+const WEBHOOK_SECRET = process.env.AUTUMN_WEBHOOK_SECRET;
+
+app.post("/webhooks/autumn", async (req, res) => {
+  const payload = JSON.stringify(req.body);
+  const headers = req.headers;
+  
+  const wh = new Webhook(WEBHOOK_SECRET);
+  
+  try {
+    const event = wh.verify(payload, {
+      "svix-id": headers["svix-id"],
+      "svix-timestamp": headers["svix-timestamp"],
+      "svix-signature": headers["svix-signature"]
+    });
+    
+    // Process verified event
+    await handleWebhook(event);
+    
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Webhook verification failed:", error);
+    res.status(400).json({ error: "Invalid signature" });
+  }
+});
+```
+
+### Manual Verification
+
+```typescript
+import crypto from "crypto";
+
+function verifySignature(payload, signature, secret) {
+  const expectedSignature = crypto
+    .createHmac("sha256", secret)
+    .update(payload)
+    .digest("hex");
+  
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSignature)
+  );
+}
+```
+
+## Error Handling
+
+### Handling Failures Gracefully
+
+```typescript
+async function handleWebhook(event) {
+  try {
+    switch (event.type) {
+      case "customer.products.updated":
+        await handleProductUpdate(event.data);
+        break;
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
+    }
+  } catch (error) {
+    // Log error but still return 200 to prevent retries
+    console.error("Webhook processing error:", error);
+    
+    // Store failed webhook for manual review
+    await db.failedWebhooks.create({
+      data: {
+        event_type: event.type,
+        payload: event,
+        error: error.message,
+        timestamp: new Date()
+      }
+    });
+    
+    // For critical errors, you might want to throw
+    // to trigger Svix retry mechanism
+    // throw error;
+  }
+}
+```
+
+### Retry Logic
+
+Svix automatically retries failed webhooks:
+
+- Retries: Up to 5 attempts
+- Backoff: Exponential (1s, 5s, 30s, 2m, 5m)
+- Success: Expects 2xx response
+
+```typescript
+// Return 200 for successful processing
+res.status(200).json({ received: true });
+
+// Return 5xx to trigger retry
+if (databaseError) {
+  res.status(500).json({ error: "Database unavailable" });
+}
+
+// Return 4xx to skip retry (permanent failure)
+if (invalidData) {
+  res.status(400).json({ error: "Invalid webhook data" });
+}
+```
+
+## Idempotency
+
+Webhooks may be delivered multiple times. Handle them idempotently:
+
+```typescript
+async function handleProductUpdate(data) {
+  const { customer, updated_product } = data;
+  const webhookId = data.webhook_id;  // Unique ID from Svix
+  
+  // Check if already processed
+  const existing = await db.processedWebhooks.findUnique({
+    where: { webhookId }
+  });
+  
+  if (existing) {
+    console.log("Webhook already processed");
+    return;
+  }
+  
+  // Process webhook
+  await db.$transaction([
+    // Update customer data
+    db.customers.update({
+      where: { id: customer.id },
+      data: { planId: updated_product.product_id }
+    }),
+    // Mark as processed
+    db.processedWebhooks.create({
+      data: { webhookId, processedAt: new Date() }
+    })
+  ]);
+}
+```
+
+## Testing Webhooks
+
+### Using Svix Play
+
+Svix Play provides a free webhook testing endpoint:
+
+```typescript
+import { generatePlayToken, getPlayWebhookUrl } from "@svix/play";
+
+const playToken = await generatePlayToken();
+const playUrl = getPlayWebhookUrl(playToken);
+
+console.log(`Test webhook URL: ${playUrl}`);
+// Configure this URL in Autumn dashboard for testing
+```
+
+### Local Testing with ngrok
+
+```bash
+# Start ngrok tunnel
+ngrok http 3000
+
+# Use ngrok URL in Autumn dashboard
+https://abc123.ngrok.io/webhooks/autumn
+```
+
+### Webhook Test Handler
+
+```typescript
+app.post("/webhooks/autumn/test", async (req, res) => {
+  console.log("Test webhook received:");
+  console.log(JSON.stringify(req.body, null, 2));
+  
+  res.status(200).json({ 
+    received: true,
+    timestamp: new Date().toISOString()
+  });
+});
+```
+
+## Best Practices
+
+<Tip>
+**Always verify signatures**: Never process webhooks without verifying the Svix signature first.
+</Tip>
+
+<Warning>
+**Keep handlers fast**: Process webhooks quickly (< 5 seconds) to avoid timeouts. Queue long-running tasks.
+</Warning>
+
+### Queue Long-Running Tasks
+
+```typescript
+import { Queue } from "bull";
+
+const webhookQueue = new Queue("webhooks");
+
+app.post("/webhooks/autumn", async (req, res) => {
+  const payload = req.body;
+  const signature = req.headers["svix-signature"];
+  
+  // Verify signature
+  const event = verifyWebhook(payload, signature);
+  
+  // Queue for processing
+  await webhookQueue.add(event);
+  
+  // Respond immediately
+  res.status(200).json({ received: true });
+});
+
+// Process in background
+webhookQueue.process(async (job) => {
+  await handleWebhook(job.data);
+});
+```
+
+### Logging and Monitoring
+
+```typescript
+async function handleWebhook(event) {
+  const startTime = Date.now();
+  
+  try {
+    console.log(`Processing webhook: ${event.type}`, {
+      customer_id: event.data.customer?.id,
+      event_id: event.id
+    });
+    
+    await processWebhook(event);
+    
+    const duration = Date.now() - startTime;
+    console.log(`Webhook processed in ${duration}ms`);
+    
+    // Send to monitoring
+    await monitoring.trackWebhook({
+      type: event.type,
+      success: true,
+      duration
+    });
+  } catch (error) {
+    console.error(`Webhook processing failed:`, error);
+    
+    await monitoring.trackWebhook({
+      type: event.type,
+      success: false,
+      error: error.message
+    });
+    
+    throw error;
+  }
+}
+```
+
+### Database Consistency
+
+Ensure webhook processing maintains data consistency:
+
+```typescript
+async function handleProductUpdate(data) {
+  const { customer, updated_product } = data;
+  
+  // Use transactions to ensure atomicity
+  await db.$transaction(async (tx) => {
+    // Update customer
+    await tx.customers.update({
+      where: { id: customer.id },
+      data: {
+        planId: updated_product.product_id,
+        planStatus: updated_product.status,
+        lastUpdated: new Date()
+      }
+    });
+    
+    // Update related records
+    if (updated_product.status === "canceled") {
+      await tx.subscriptions.update({
+        where: { customerId: customer.id },
+        data: { canceledAt: new Date() }
+      });
+    }
+    
+    // Log webhook processing
+    await tx.webhookLogs.create({
+      data: {
+        type: "customer.products.updated",
+        customerId: customer.id,
+        processedAt: new Date()
+      }
+    });
+  });
+}
+```
+
+## Debugging Webhooks
+
+### Svix Dashboard
+
+Access the Svix dashboard to:
+- View all webhook deliveries
+- See response status codes
+- Replay failed webhooks
+- View webhook payloads and headers
+
+### Local Debugging
+
+```typescript
+app.post("/webhooks/autumn", async (req, res) => {
+  // Log everything for debugging
+  console.log("Headers:", req.headers);
+  console.log("Body:", JSON.stringify(req.body, null, 2));
+  
+  try {
+    const event = verifyWebhook(req.body, req.headers["svix-signature"]);
+    console.log("Verified event:", event);
+    
+    await handleWebhook(event);
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Subscriptions" icon="repeat" href="/guides/subscriptions">
+    React to subscription changes
+  </Card>
+  <Card title="Usage-Based Billing" icon="chart-line" href="/guides/usage-based-billing">
+    Track usage events via webhooks
+  </Card>
+  <Card title="Stripe Integration" icon="stripe" href="/guides/stripe-integration">
+    Understand Stripe webhook flow
+  </Card>
+  <Card title="API Reference" icon="book" href="/api-reference/introduction">
+    View all webhook event types
+  </Card>
+</CardGroup>

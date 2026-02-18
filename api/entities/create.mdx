@@ -1,0 +1,322 @@
+---
+title: "Create Entity"
+description: "Create a new entity linked to a customer and feature"
+---
+
+## Overview
+
+Creates a new entity (such as a team member, workspace, or API key) that is linked to a customer and counts toward a feature limit. Entities are essential for seat-based pricing, workspace limits, and per-resource billing.
+
+## Endpoint
+
+```
+POST /v1/entities
+```
+
+## Authentication
+
+Requires a secret API key in the Authorization header:
+
+```
+Authorization: Bearer your_secret_key
+```
+
+## Request Body
+
+<ParamField body="id" type="string" required>
+  The ID of the entity. Use your internal resource ID (e.g., user ID, workspace ID) to keep entities synced with your database.
+</ParamField>
+
+<ParamField body="name" type="string">
+  The name of the entity (e.g., "Alice Johnson", "Production Workspace"). Displayed to customers for transparency.
+</ParamField>
+
+<ParamField body="feature_id" type="string" required>
+  The ID of the feature this entity counts toward (e.g., "team_seats", "workspaces").
+</ParamField>
+
+<ParamField body="customer_data" type="object">
+  Optional customer data if the entity should be linked to a customer.
+  
+  <Expandable title="customer_data properties">
+    <ParamField body="customer_data.id" type="string">
+      The customer ID to link this entity to
+    </ParamField>
+    
+    <ParamField body="customer_data.name" type="string">
+      Customer name
+    </ParamField>
+    
+    <ParamField body="customer_data.email" type="string">
+      Customer email
+    </ParamField>
+    
+    <ParamField body="customer_data.metadata" type="object">
+      Additional metadata for the customer
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="with_autumn_id" type="boolean" default={false}>
+  Whether to return the internal Autumn ID in the response
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string">
+  The unique identifier of the entity (your provided ID)
+</ResponseField>
+
+<ResponseField name="autumn_id" type="string">
+  The internal Autumn ID (only if `with_autumn_id=true`)
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The name of the entity
+</ResponseField>
+
+<ResponseField name="customer_id" type="string">
+  The customer ID this entity belongs to
+</ResponseField>
+
+<ResponseField name="feature_id" type="string">
+  The feature ID this entity counts toward
+</ResponseField>
+
+<ResponseField name="created_at" type="number">
+  Unix timestamp (in seconds) when the entity was created
+</ResponseField>
+
+<ResponseField name="env" type="string">
+  The environment: "sandbox" or "live"
+</ResponseField>
+
+<ResponseField name="subscriptions" type="array">
+  Plans associated with this entity (when expanded)
+</ResponseField>
+
+<ResponseField name="balances" type="object">
+  Feature balances associated with this entity (when expanded)
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash curl
+curl -X POST https://api.useautumn.com/v1/entities \
+  -H "Authorization: Bearer sk_test_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "user_456",
+    "name": "Alice Johnson",
+    "feature_id": "team_seats",
+    "customer_data": {
+      "id": "team_123"
+    }
+  }'
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'sk_test_...'
+});
+
+const entity = await autumn.entities.create({
+  id: 'user_456',
+  name: 'Alice Johnson',
+  featureId: 'team_seats',
+  customerData: {
+    id: 'team_123'
+  }
+});
+
+console.log(entity.id); // "user_456"
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: process.env.AUTUMN_SECRET_KEY!
+});
+
+const entity = await autumn.entities.create({
+  id: 'user_456',
+  name: 'Alice Johnson',
+  featureId: 'team_seats',
+  customerData: {
+    id: 'team_123'
+  }
+});
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.useautumn.com/v1/entities',
+    headers={
+        'Authorization': 'Bearer sk_test_...',
+        'Content-Type': 'application/json',
+    },
+    json={
+        'id': 'user_456',
+        'name': 'Alice Johnson',
+        'feature_id': 'team_seats',
+        'customer_data': {
+            'id': 'team_123'
+        }
+    }
+)
+
+entity = response.json()
+```
+
+</CodeGroup>
+
+## Response Example
+
+```json
+{
+  "id": "user_456",
+  "name": "Alice Johnson",
+  "customer_id": "team_123",
+  "feature_id": "team_seats",
+  "created_at": 1709251200,
+  "env": "live",
+  "subscriptions": [],
+  "scheduled_subscriptions": [],
+  "balances": {}
+}
+```
+
+## Use Cases
+
+### Team Member (Seat)
+
+```javascript
+// Add a team member when they join
+async function addTeamMember(teamId, userId, userName) {
+  // Check if seats available
+  const check = await autumn.check({
+    customerId: teamId,
+    featureId: 'team_seats'
+  });
+  
+  if (check.remaining === 0) {
+    throw new Error('No seats available. Please upgrade.');
+  }
+  
+  // Create entity for the new seat
+  await autumn.entities.create({
+    id: userId,
+    name: userName,
+    featureId: 'team_seats',
+    customerData: { id: teamId }
+  });
+}
+```
+
+### Workspace Creation
+
+```javascript
+// Create a workspace entity
+async function createWorkspace(userId, workspaceName) {
+  const check = await autumn.check({
+    customerId: userId,
+    featureId: 'workspaces'
+  });
+  
+  if (!check.allowed) {
+    throw new Error('Workspace limit reached');
+  }
+  
+  // Create workspace in your database
+  const workspace = await db.workspaces.create({
+    name: workspaceName,
+    ownerId: userId
+  });
+  
+  // Create entity in Autumn
+  await autumn.entities.create({
+    id: workspace.id,
+    name: workspaceName,
+    featureId: 'workspaces',
+    customerData: { id: userId }
+  });
+  
+  return workspace;
+}
+```
+
+### API Key with Limits
+
+```javascript
+// Create an API key entity
+async function createApiKey(userId, keyName) {
+  const apiKey = generateSecureKey();
+  
+  // Store in database
+  await db.apiKeys.create({
+    key: apiKey,
+    name: keyName,
+    userId
+  });
+  
+  // Create entity in Autumn
+  await autumn.entities.create({
+    id: apiKey,
+    name: keyName,
+    featureId: 'api_keys',
+    customerData: { id: userId }
+  });
+  
+  return apiKey;
+}
+```
+
+## Best Practices
+
+<Tip>
+  **Always check limits first**: Call `/check` before creating entities to enforce limits and provide upgrade prompts to users.
+</Tip>
+
+<Tip>
+  **Use resource IDs**: Set the entity `id` to your internal resource ID (user ID, workspace ID, etc.) for easy synchronization.
+</Tip>
+
+<Tip>
+  **Descriptive names**: Use clear, customer-friendly names that help users understand what they're being charged for.
+</Tip>
+
+<Warning>
+  Creating an entity may trigger billing if it exceeds the customer's plan limits. Autumn automatically handles proration and Stripe subscription updates.
+</Warning>
+
+## Related Endpoints
+
+<CardGroup cols={2}>
+  <Card title="Check Access" icon="shield-check" href="/api/check">
+    Verify entity limits before creation
+  </Card>
+  <Card title="List Entities" icon="list" href="/api/entities/list">
+    Retrieve all entities for a customer
+  </Card>
+  <Card title="Delete Entity" icon="trash" href="/api/entities/delete">
+    Remove an entity and free up capacity
+  </Card>
+  <Card title="Get Entity" icon="eye" href="/api/entities/get">
+    Retrieve a specific entity
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [Entities Concept Guide](/concepts/entities)
+- [Seat-based Pricing Guide](/guides/seat-based-pricing)
+- [Features API](/api/features/create)

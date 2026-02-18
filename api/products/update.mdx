@@ -1,0 +1,453 @@
+---
+title: 'Update Product'
+description: 'Modify an existing product configuration including pricing, features, and settings'
+---
+
+## Overview
+
+Update an existing product's configuration. You can modify the product name, description, items, free trial settings, and other properties. This endpoint supports versioning and upsert operations.
+
+<Note>
+  Updating a product creates a new version by default. Existing customers remain on their current version unless migrated.
+</Note>
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.useautumn.com/products/pro-plan \
+  -H "Authorization: Bearer YOUR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Pro Plan (Updated)",
+    "description": "Enhanced professional features",
+    "items": [
+      {
+        "price": 39,
+        "interval": "month"
+      },
+      {
+        "feature_id": "api-calls",
+        "included_usage": 20000,
+        "price": 0.008,
+        "interval": "month",
+        "usage_model": "pay_per_use"
+      }
+    ]
+  }'
+```
+
+```javascript JavaScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'YOUR_SECRET_KEY'
+});
+
+const updatedProduct = await autumn.products.update('pro-plan', {
+  name: 'Pro Plan (Updated)',
+  description: 'Enhanced professional features',
+  items: [
+    {
+      price: 39,
+      interval: 'month'
+    },
+    {
+      feature_id: 'api-calls',
+      included_usage: 20000,
+      price: 0.008,
+      interval: 'month',
+      usage_model: 'pay_per_use'
+    }
+  ]
+});
+```
+
+```typescript TypeScript SDK
+import { Autumn } from '@useautumn/sdk';
+
+const autumn = new Autumn({
+  secretKey: 'YOUR_SECRET_KEY'
+});
+
+const updatedProduct = await autumn.products.update('pro-plan', {
+  name: 'Pro Plan (Updated)',
+  description: 'Enhanced professional features',
+  items: [
+    {
+      price: 39,
+      interval: 'month'
+    },
+    {
+      feature_id: 'api-calls',
+      included_usage: 20000,
+      price: 0.008,
+      interval: 'month',
+      usage_model: 'pay_per_use'
+    }
+  ]
+});
+```
+</CodeGroup>
+
+## Path Parameters
+
+<ParamField path="product_id" type="string" required>
+  The unique identifier of the product to update.
+  
+  Example: `pro-plan`, `enterprise-tier`
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="version" type="string">
+  Specific version number to update. If not provided, updates the latest version.
+  
+  Example: `2`, `5`
+</ParamField>
+
+<ParamField query="upsert" type="boolean" default={false}>
+  If `true`, creates the product if it doesn't exist. If `false`, returns an error if the product is not found.
+</ParamField>
+
+<ParamField query="disable_version" type="boolean" default={false}>
+  If `true`, updates the existing version in place instead of creating a new version. Use with caution as this affects all customers on the current version.
+  
+  <Warning>
+    Disabling versioning updates the product for all existing customers immediately. Use this carefully.
+  </Warning>
+</ParamField>
+
+## Request Body
+
+All fields are optional. Only include fields you want to update.
+
+<ParamField body="id" type="string">
+  Change the product ID. Must be unique and URL-safe.
+  
+  <Warning>
+    Changing the product ID may break existing integrations. Update with caution.
+  </Warning>
+</ParamField>
+
+<ParamField body="name" type="string">
+  The display name of the product.
+  
+  Example: `Pro Plan (Updated)`, `Enterprise Tier v2`
+</ParamField>
+
+<ParamField body="description" type="string">
+  The product description.
+</ParamField>
+
+<ParamField body="is_add_on" type="boolean">
+  Whether the product is an add-on.
+</ParamField>
+
+<ParamField body="is_default" type="boolean">
+  Whether the product should be the default product for new customers.
+</ParamField>
+
+<ParamField body="group" type="string">
+  The product group identifier. Change this to move the product to a different upgrade/downgrade group.
+</ParamField>
+
+<ParamField body="archived" type="boolean">
+  Archive this product. Archived products are hidden from the dashboard and unavailable for new customers.
+  
+  <Note>
+    Archiving doesn't affect existing customers. They continue with their current subscription.
+  </Note>
+</ParamField>
+
+<ParamField body="items" type="array">
+  Array of product items. When provided, replaces all existing items.
+  
+  <Expandable title="Product Item Properties">
+    <ParamField body="type" type="string">
+      The type: `price`, `feature`, or `priced_feature`
+    </ParamField>
+    
+    <ParamField body="price" type="number">
+      The price amount.
+    </ParamField>
+    
+    <ParamField body="interval" type="string">
+      Billing or reset interval: `one_off`, `week`, `month`, `quarter`, `semi_annual`, `year`
+    </ParamField>
+    
+    <ParamField body="interval_count" type="number">
+      Number of intervals between billings/resets.
+    </ParamField>
+    
+    <ParamField body="feature_id" type="string">
+      The feature identifier.
+    </ParamField>
+    
+    <ParamField body="included_usage" type="number">
+      Amount of usage included per interval.
+    </ParamField>
+    
+    <ParamField body="usage_model" type="string">
+      Billing model: `prepaid` or `pay_per_use`
+    </ParamField>
+    
+    <ParamField body="billing_units" type="number">
+      Billing units for usage-based pricing.
+    </ParamField>
+    
+    <ParamField body="tiers" type="array">
+      Tiered pricing configuration.
+      
+      <Expandable title="Tier Properties">
+        <ParamField body="to" type="number | 'inf'">
+          Maximum usage for this tier.
+        </ParamField>
+        
+        <ParamField body="amount" type="number">
+          Price per unit in this tier.
+        </ParamField>
+      </Expandable>
+    </ParamField>
+    
+    <ParamField body="reset_usage_when_enabled" type="boolean">
+      Whether to reset usage when enabled.
+    </ParamField>
+    
+    <ParamField body="entity_feature_id" type="string">
+      Feature ID for entity tracking.
+    </ParamField>
+    
+    <ParamField body="config" type="object">
+      Advanced configuration.
+      
+      <Expandable title="Config Properties">
+        <ParamField body="on_increase" type="string">
+          Proration on increase: `immediate_charge`, `prorate`, or `none`
+        </ParamField>
+        
+        <ParamField body="on_decrease" type="string">
+          Proration on decrease: `immediate_refund`, `credit`, or `none`
+        </ParamField>
+        
+        <ParamField body="rollover" type="object">
+          Rollover configuration.
+          
+          <ParamField body="max" type="number">
+            Maximum rollover amount.
+          </ParamField>
+          
+          <ParamField body="duration" type="string">
+            Rollover duration type: `day`, `month`, `year`
+          </ParamField>
+          
+          <ParamField body="length" type="number">
+            Rollover duration length.
+          </ParamField>
+        </ParamField>
+      </Expandable>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="free_trial" type="object">
+  Free trial configuration. Set to `null` to remove the free trial.
+  
+  <Expandable title="Free Trial Properties">
+    <ParamField body="duration" type="string">
+      Duration type: `day`, `month`, or `year`
+    </ParamField>
+    
+    <ParamField body="length" type="number">
+      Trial length in duration units.
+    </ParamField>
+    
+    <ParamField body="card_required" type="boolean">
+      Whether a payment method is required.
+    </ParamField>
+    
+    <ParamField body="unique_fingerprint" type="boolean">
+      Whether trials are limited per fingerprint.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+Returns the updated product object with all properties. See the [Get Product](/api/products/get) endpoint for the complete response structure.
+
+<ResponseField name="id" type="string">
+  The product identifier.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The updated product name.
+</ResponseField>
+
+<ResponseField name="version" type="number">
+  The new version number (incremented unless `disable_version` was true).
+</ResponseField>
+
+<ResponseField name="items" type="array">
+  The updated array of product items.
+</ResponseField>
+
+<ResponseField name="free_trial" type="object">
+  The updated free trial configuration.
+</ResponseField>
+
+## Examples
+
+### Update Pricing
+
+Increase the monthly price and adjust feature limits:
+
+```json
+{
+  "items": [
+    {
+      "price": 49,
+      "interval": "month"
+    },
+    {
+      "feature_id": "api-calls",
+      "included_usage": 25000,
+      "price": 0.008,
+      "interval": "month",
+      "usage_model": "pay_per_use"
+    }
+  ]
+}
+```
+
+### Add New Features
+
+Add additional features to an existing product:
+
+```json
+{
+  "items": [
+    {
+      "price": 29,
+      "interval": "month"
+    },
+    {
+      "feature_id": "api-calls",
+      "included_usage": 10000,
+      "price": 0.01,
+      "interval": "month",
+      "usage_model": "pay_per_use"
+    },
+    {
+      "feature_id": "advanced-analytics",
+      "included_usage": 1
+    },
+    {
+      "feature_id": "priority-support",
+      "included_usage": 1
+    }
+  ]
+}
+```
+
+### Update Free Trial
+
+Extend the trial period:
+
+```json
+{
+  "free_trial": {
+    "duration": "day",
+    "length": 30,
+    "card_required": false,
+    "unique_fingerprint": true
+  }
+}
+```
+
+### Archive Product
+
+Hide a product from new customers:
+
+```json
+{
+  "archived": true
+}
+```
+
+### Change to Annual Billing
+
+Convert a monthly plan to annual:
+
+```json
+{
+  "name": "Pro Plan (Annual)",
+  "items": [
+    {
+      "price": 290,
+      "interval": "year"
+    },
+    {
+      "feature_id": "api-calls",
+      "included_usage": 10000,
+      "interval": "month",
+      "reset_usage_when_enabled": true
+    }
+  ]
+}
+```
+
+### Update With Tiered Pricing
+
+Add volume-based pricing tiers:
+
+```json
+{
+  "items": [
+    {
+      "feature_id": "storage",
+      "included_usage": 0,
+      "interval": "month",
+      "usage_model": "pay_per_use",
+      "tiers": [
+        { "to": 100, "amount": 0.50 },
+        { "to": 1000, "amount": 0.30 },
+        { "to": "inf", "amount": 0.20 }
+      ],
+      "billing_units": 1
+    }
+  ]
+}
+```
+
+## Versioning
+
+By default, updating a product creates a new version. This allows you to:
+
+- Change pricing without affecting existing customers
+- Gradually migrate customers to the new version
+- A/B test different pricing structures
+- Maintain historical product configurations
+
+### Disable Versioning
+
+To update a product in place (affecting all customers immediately):
+
+```bash
+curl -X POST "https://api.useautumn.com/products/pro-plan?disable_version=true" \
+  -H "Authorization: Bearer YOUR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Pro Plan (Updated)"}'
+```
+
+### Upsert Mode
+
+Create the product if it doesn't exist:
+
+```bash
+curl -X POST "https://api.useautumn.com/products/new-plan?upsert=true" \
+  -H "Authorization: Bearer YOUR_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "New Plan",
+    "items": [{"price": 19, "interval": "month"}]
+  }'
+```

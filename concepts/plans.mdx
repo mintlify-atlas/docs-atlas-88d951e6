@@ -1,0 +1,622 @@
+---
+title: Plans
+description: Learn about plans, the API representation of products in Autumn
+---
+
+# Plans
+
+Plans are the API-facing representation of products in Autumn. While products are the underlying data model, plans are what you interact with when building your application.
+
+<Info>
+**Product vs Plan**: These terms refer to the same concept from different perspectives:
+- **Product**: Backend model (database, internal logic)
+- **Plan**: API model (what developers use in code)
+</Info>
+
+## Plan Structure
+
+The Plan API schema is defined in `source/shared/api/products/apiPlanV1.ts:9`:
+
+```typescript
+{
+  // Identity
+  id: string,
+  name: string,
+  description: string?,
+  group: string?,
+  
+  // Configuration
+  version: number,
+  add_on: boolean,
+  auto_enable: boolean,
+  
+  // Pricing
+  price: {
+    amount: number,
+    interval: "day" | "week" | "month" | "year" | "once",
+    interval_count: number?,
+    display: {
+      visible: boolean,
+      suffix: string?
+    }?
+  }?,
+  
+  // Features (plan items)
+  items: PlanItem[],
+  
+  // Free trial
+  free_trial: {
+    duration: number,
+    unit: string
+  }?,
+  
+  // Metadata
+  created_at: number,
+  env: "development" | "production",
+  archived: boolean,
+  base_variant_id: string?
+}
+```
+
+## Plan Items (Features)
+
+Each plan includes an array of items that define feature access. From `source/shared/api/products/items/apiPlanItemV1.ts:14`:
+
+```typescript
+{
+  // Feature reference
+  feature_id: string,
+  feature: Feature?,  // Expanded feature object
+  
+  // Allowance
+  included: number,      // Amount included (e.g., 1000 API calls)
+  unlimited: boolean,    // Whether usage is unlimited
+  
+  // Reset interval
+  reset: {
+    interval: "day" | "week" | "month" | "year",
+    interval_count: number?
+  }?,
+  
+  // Usage pricing
+  price: {
+    amount: number?,        // Fixed price per unit
+    tiers: {                // Or tiered pricing
+      to: number | "infinite",
+      amount: number
+    }[]?,
+    interval: "day" | "week" | "month" | "year" | "once",
+    interval_count: number?,
+    billing_units: number,  // Units per billing increment
+    billing_method: "package" | "per_unit" | "tiered",
+    max_purchase: number?   // Maximum units purchasable
+  }?,
+  
+  // Display
+  display: {
+    visible: boolean,
+    suffix: string?
+  }?,
+  
+  // Advanced
+  rollover: {
+    max: number?,
+    expiry_duration_type: "billing_cycle" | "fixed_duration",
+    expiry_duration_length: number?
+  }?,
+  
+  proration: {
+    on_increase: "prorate_immediately" | "wait_until_next_cycle",
+    on_decrease: "prorate_immediately" | "wait_until_next_cycle"
+  }?,
+  
+  entity_feature_id: string?  // For seat-based features
+}
+```
+
+## Plan Types
+
+Autumn supports multiple plan configurations based on your pricing model:
+
+### Subscription Plans
+
+<Accordion title="Fixed Subscription">
+  A simple recurring subscription with a base price and included features.
+  
+  ```json
+  {
+    "id": "pro-monthly",
+    "name": "Pro Plan",
+    "add_on": false,
+    "price": {
+      "amount": 4900,
+      "interval": "month"
+    },
+    "items": [
+      {
+        "feature_id": "api_calls",
+        "included": 10000,
+        "unlimited": false,
+        "reset": {
+          "interval": "month"
+        }
+      },
+      {
+        "feature_id": "team_members",
+        "included": 5,
+        "unlimited": false
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+<Accordion title="Usage-based Subscription">
+  A subscription with base price plus usage-based charges.
+  
+  ```json
+  {
+    "id": "usage-plan",
+    "name": "Usage-based",
+    "price": {
+      "amount": 2900,
+      "interval": "month"
+    },
+    "items": [
+      {
+        "feature_id": "api_calls",
+        "included": 5000,
+        "reset": { "interval": "month" },
+        "price": {
+          "tiers": [
+            { "to": 10000, "amount": 1000 },
+            { "to": "infinite", "amount": 500 }
+          ],
+          "interval": "month",
+          "billing_units": 1000,
+          "billing_method": "per_unit"
+        }
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+<Accordion title="Prepaid Credits">
+  A one-time purchase of credits that don't expire.
+  
+  ```json
+  {
+    "id": "credit-pack-1000",
+    "name": "1000 Credits",
+    "price": {
+      "amount": 9900,
+      "interval": "once"
+    },
+    "items": [
+      {
+        "feature_id": "credits",
+        "included": 1000,
+        "unlimited": false,
+        "reset": null  // No reset, credits persist
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+### Add-on Plans
+
+Add-ons extend existing subscriptions:
+
+```json
+{
+  "id": "priority-support",
+  "name": "Priority Support",
+  "add_on": true,
+  "price": {
+    "amount": 2900,
+    "interval": "month"
+  },
+  "items": [
+    {
+      "feature_id": "priority_support",
+      "included": 1,
+      "unlimited": false
+    }
+  ]
+}
+```
+
+<Tip>
+Set `add_on: true` to mark a plan as an add-on. Add-ons can be attached alongside base plans.
+</Tip>
+
+## Billing Intervals
+
+From `source/shared/models/productModels/intervals/billingInterval.ts`, Autumn supports:
+
+- `day` - Daily billing
+- `week` - Weekly billing
+- `month` - Monthly billing (most common)
+- `year` - Annual billing
+- `once` - One-time payment
+
+### Interval Count
+
+Use `interval_count` for custom billing periods:
+
+```json
+// Bill every 3 months (quarterly)
+{
+  "price": {
+    "amount": 12900,
+    "interval": "month",
+    "interval_count": 3
+  }
+}
+
+// Bill every 6 months
+{
+  "price": {
+    "amount": 24900,
+    "interval": "month",
+    "interval_count": 6
+  }
+}
+```
+
+## Reset Intervals
+
+Usage limits can reset on different intervals than billing:
+
+<Note>
+Reset intervals control when feature usage counts are cleared. This is separate from billing intervals.
+</Note>
+
+```json
+{
+  "id": "annual-plan",
+  "price": {
+    "amount": 49900,
+    "interval": "year"  // Bill annually
+  },
+  "items": [
+    {
+      "feature_id": "api_calls",
+      "included": 100000,
+      "reset": {
+        "interval": "month"  // But reset usage monthly
+      }
+    }
+  ]
+}
+```
+
+## Billing Methods
+
+From `source/shared/api/products/components/billingMethod.ts`, Autumn supports three billing methods:
+
+<Accordion title="per_unit">
+  Charge for each unit consumed.
+  
+  ```json
+  {
+    "price": {
+      "amount": 500,  // $5.00 per unit
+      "billing_units": 1,
+      "billing_method": "per_unit"
+    }
+  }
+  ```
+  
+  **Example**: $5 per API call
+</Accordion>
+
+<Accordion title="package">
+  Charge per package of units.
+  
+  ```json
+  {
+    "price": {
+      "amount": 1000,  // $10.00 per package
+      "billing_units": 1000,  // 1000 units per package
+      "billing_method": "package"
+    }
+  }
+  ```
+  
+  **Example**: $10 per 1000 API calls (rounds up)
+</Accordion>
+
+<Accordion title="tiered">
+  Use different rates at different volume tiers.
+  
+  ```json
+  {
+    "price": {
+      "tiers": [
+        { "to": 10000, "amount": 1000 },   // First 10k: $10/1k
+        { "to": 50000, "amount": 800 },    // Next 40k: $8/1k
+        { "to": "infinite", "amount": 600 } // Above 50k: $6/1k
+      ],
+      "billing_units": 1000,
+      "billing_method": "tiered"
+    }
+  }
+  ```
+  
+  **Example**: Volume-based pricing that gets cheaper at scale
+</Accordion>
+
+## Rollover Configuration
+
+Allow unused usage to roll over between periods:
+
+```json
+{
+  "feature_id": "sms_messages",
+  "included": 1000,
+  "reset": {
+    "interval": "month"
+  },
+  "rollover": {
+    "max": 2000,  // Max 2000 messages can accumulate
+    "expiry_duration_type": "billing_cycle",
+    "expiry_duration_length": 2  // Expire after 2 cycles
+  }
+}
+```
+
+<Info>
+**How it works**: If a customer uses 800 of 1000 messages, 200 roll over to next month. They now have 1200 messages available (1000 base + 200 rollover).
+</Info>
+
+## Proration
+
+Control how upgrades and downgrades are charged:
+
+```json
+{
+  "proration": {
+    "on_increase": "prorate_immediately",  // Charge prorated amount now
+    "on_decrease": "wait_until_next_cycle" // Credit at next billing
+  }
+}
+```
+
+From `source/shared/models/productV2Models/productItemModels/productItemEnums.ts`:
+
+- `prorate_immediately` - Apply changes and charge/credit immediately
+- `wait_until_next_cycle` - Apply changes at next billing cycle
+
+## Free Trials
+
+Add a free trial to any plan:
+
+```json
+{
+  "id": "pro-plan",
+  "name": "Pro Plan",
+  "price": {
+    "amount": 4900,
+    "interval": "month"
+  },
+  "free_trial": {
+    "duration": 14,
+    "unit": "day"
+  }
+}
+```
+
+<Tip>
+Free trials give customers full access to the plan without charging them. After the trial ends, they're automatically billed unless they cancel.
+</Tip>
+
+## Customer Eligibility
+
+When fetching plans for a specific customer, Autumn includes eligibility information:
+
+```json
+{
+  "id": "pro-plan",
+  "name": "Pro Plan",
+  // ... plan details
+  "customer_eligibility": {
+    "trial_available": false,  // Customer already used trial
+    "scenario": "upgrade"      // What happens if attached
+  }
+}
+```
+
+**Scenarios**:
+- `new` - Customer doesn't have any plan
+- `upgrade` - This plan is better than current
+- `downgrade` - This plan is worse than current
+- `same` - Customer already has this plan
+
+## Working with Plans
+
+### List All Plans
+
+```typescript
+const { data } = await autumn.listPlans();
+
+console.log(data.plans); // Array of plans
+```
+
+### Get Plan Details
+
+```typescript
+const { data } = await autumn.getPlan({
+  planId: "pro-plan"
+});
+
+console.log(data.name);  // "Pro Plan"
+console.log(data.items); // Array of plan items
+```
+
+### Attach Plan to Customer
+
+```typescript
+const { data } = await autumn.attach({
+  customerId: "user_123",
+  productId: "pro-plan"
+});
+
+if (data.url) {
+  // Redirect to Stripe Checkout
+  window.location.href = data.url;
+} else {
+  // Upgrade/downgrade completed immediately
+  console.log("Plan attached!");
+}
+```
+
+## Real-world Examples
+
+### SaaS Tiered Plans
+
+```json
+[
+  {
+    "id": "free",
+    "name": "Free",
+    "auto_enable": true,
+    "price": null,
+    "items": [
+      { "feature_id": "projects", "included": 1 },
+      { "feature_id": "storage_gb", "included": 1 }
+    ]
+  },
+  {
+    "id": "pro",
+    "name": "Pro",
+    "price": { "amount": 1900, "interval": "month" },
+    "items": [
+      { "feature_id": "projects", "unlimited": true },
+      { "feature_id": "storage_gb", "included": 100 }
+    ]
+  },
+  {
+    "id": "enterprise",
+    "name": "Enterprise",
+    "price": { "amount": 9900, "interval": "month" },
+    "items": [
+      { "feature_id": "projects", "unlimited": true },
+      { "feature_id": "storage_gb", "unlimited": true },
+      { "feature_id": "priority_support", "included": 1 }
+    ]
+  }
+]
+```
+
+### API Product with Overages
+
+```json
+{
+  "id": "api-plan",
+  "name": "API Plan",
+  "price": {
+    "amount": 4900,
+    "interval": "month"
+  },
+  "items": [
+    {
+      "feature_id": "api_calls",
+      "included": 100000,
+      "reset": { "interval": "month" },
+      "price": {
+        "amount": 10,  // $0.10 per call over limit
+        "interval": "month",
+        "billing_units": 1,
+        "billing_method": "per_unit"
+      }
+    }
+  ]
+}
+```
+
+### Credit System
+
+```json
+[
+  {
+    "id": "credits-100",
+    "name": "100 Credits",
+    "price": { "amount": 1000, "interval": "once" },
+    "items": [
+      { "feature_id": "credits", "included": 100, "reset": null }
+    ]
+  },
+  {
+    "id": "credits-500",
+    "name": "500 Credits",
+    "price": { "amount": 4500, "interval": "once" },
+    "items": [
+      { "feature_id": "credits", "included": 500, "reset": null }
+    ]
+  }
+]
+```
+
+### Seat-based Plan
+
+```json
+{
+  "id": "team-plan",
+  "name": "Team Plan",
+  "price": {
+    "amount": 2900,  // Base price
+    "interval": "month"
+  },
+  "items": [
+    {
+      "feature_id": "team_seats",
+      "included": 3,  // 3 seats included
+      "entity_feature_id": "team_seats",
+      "price": {
+        "amount": 1500,  // $15 per additional seat
+        "interval": "month",
+        "billing_units": 1,
+        "billing_method": "per_unit"
+      }
+    }
+  ]
+}
+```
+
+## Best Practices
+
+<Tip>
+**Keep plan IDs stable**: Use descriptive IDs that won't change (e.g., `pro-monthly` not `plan-2`). Plan IDs are used in code and databases.
+</Tip>
+
+<Tip>
+**Use groups for organization**: Group related plans together (e.g., `group: "tier"` for pricing tiers, `group: "add-ons"` for add-ons).
+</Tip>
+
+<Tip>
+**Version carefully**: Increment version numbers when making breaking changes. Autumn handles customer migrations automatically.
+</Tip>
+
+<Note>
+**Reset vs Billing intervals**: These can be different! For example, bill annually but reset usage monthly. This gives customers predictable monthly limits with annual billing.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Features" icon="puzzle-piece" href="/concepts/features">
+    Learn about feature types and metering
+  </Card>
+  <Card title="Pricing Models" icon="dollar-sign" href="/concepts/pricing-models">
+    Explore the 4 main pricing models
+  </Card>
+  <Card title="Attach API" icon="link" href="/api/attach">
+    Attach plans to customers
+  </Card>
+  <Card title="Products API" icon="code" href="/api/products/create">
+    Create and manage plans via API
+  </Card>
+</CardGroup>

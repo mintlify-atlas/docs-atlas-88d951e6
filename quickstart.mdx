@@ -1,80 +1,408 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quick Start"
+description: "Get Autumn up and running in under 5 minutes"
 ---
 
-## Get started in three steps
+## Overview
 
-Get your documentation site running locally and make your first customization.
+This guide will help you integrate Autumn into your application. You'll learn how to:
 
-### Step 1: Set up your local environment
+- Install the Autumn SDK
+- Configure authentication
+- Create your first product
+- Implement attach, check, and track functions
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+<Note>
+  **Using cloud?** Sign up at [app.useautumn.com](https://app.useautumn.com) to get started instantly.
+  
+  **Self-hosting?** Follow our [self-hosting guide](/self-hosting) first, then return here.
+</Note>
 
-### Step 2: Deploy your changes
+## Installation
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
+  <Step title="Install the SDK">
+    Add the Autumn SDK to your project using your preferred package manager.
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    <CodeGroup>
+      ```bash npm
+      npm install autumn-js
+      ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+      ```bash yarn
+      yarn add autumn-js
+      ```
 
-### Step 3: Go live
+      ```bash pnpm
+      pnpm add autumn-js
+      ```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+      ```bash bun
+      bun add autumn-js
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Get your API key">
+    Navigate to the Autumn dashboard and generate a secret key. Add it to your environment variables.
+
+    ```bash .env
+    AUTUMN_SECRET_KEY=am_sk_your_secret_key_here
+    ```
+
+    <Warning>
+      Keep your secret key secure! Never commit it to version control or expose it in client-side code.
+    </Warning>
+  </Step>
+
+  <Step title="Set up backend authentication">
+    Mount the Autumn handler to your backend to enable the React hooks. This creates routes at `/api/autumn/*`.
+
+    <Tabs>
+      <Tab title="Next.js">
+        Create a catch-all route at `app/api/autumn/[...all]/route.ts`:
+
+        ```typescript app/api/autumn/[...all]/route.ts
+        import { autumnHandler } from "autumn-js/next";
+        import { auth } from "@/lib/auth";
+        import { headers } from "next/headers";
+
+        export const { GET, POST } = autumnHandler({
+          identify: async () => {
+            const session = await auth.api.getSession({
+              headers: await headers(),
+            });
+
+            return {
+              customerId: session?.user.id,
+              customerData: {
+                name: session?.user.name,
+                email: session?.user.email,
+              },
+            };
+          },
+        });
+        ```
+      </Tab>
+
+      <Tab title="Express">
+        ```javascript server.js
+        import express from "express";
+        import { autumnHandler } from "autumn-js/backend";
+
+        const app = express();
+        app.use(express.json());
+
+        app.use("/api/autumn/*", async (req, res) => {
+          // Your authentication logic here
+          const customerId = "user_id";
+
+          const { statusCode, response } = await autumnHandler({
+            customerId,
+            customerData: { name: "", email: "" },
+            request: {
+              url: req.url,
+              method: req.method,
+              body: req.body,
+            },
+          });
+
+          res.status(statusCode).json(response);
+        });
+        ```
+      </Tab>
+
+      <Tab title="Hono">
+        ```typescript app.ts
+        import { Hono } from "hono";
+        import { autumnHandler } from "autumn-js/backend";
+
+        const app = new Hono();
+
+        app.use("/api/autumn/*", async (c) => {
+          // Your authentication logic here
+          const customerId = "user_id";
+
+          let body = null;
+          if (c.req.method !== "GET") {
+            body = await c.req.json();
+          }
+
+          const { statusCode, response } = await autumnHandler({
+            customerId,
+            customerData: { name: "", email: "" },
+            request: {
+              url: c.req.url,
+              method: c.req.method,
+              body: body,
+            },
+          });
+
+          return c.json(response, statusCode);
+        });
+        ```
+      </Tab>
+    </Tabs>
+
+    <Tip>
+      The `customerId` should be a unique identifier for your user or organization. This links Autumn's billing data to your users.
+    </Tip>
+  </Step>
+
+  <Step title="Add the React provider">
+    Wrap your application with the `AutumnProvider` to enable React hooks throughout your app.
+
+    ```tsx app/layout.tsx
+    import { AutumnProvider } from "autumn-js/react";
+
+    export default function RootLayout({
+      children,
+    }: {
+      children: React.ReactNode;
+    }) {
+      return (
+        <html lang="en">
+          <body>
+            <AutumnProvider
+              backendUrl="http://localhost:8000"
+            >
+              {children}
+            </AutumnProvider>
+          </body>
+        </html>
+      );
+    }
+    ```
+
+    <Note>
+      If your backend URL is different from your client URL, pass it as the `backendUrl` prop.
+    </Note>
+  </Step>
+</Steps>
+
+## Create your first product
+
+<Steps>
+  <Step title="Access the dashboard">
+    Navigate to the Products page in your Autumn dashboard.
+  </Step>
+
+  <Step title="Create a product">
+    Click **Create Product** and configure:
+    - **Name**: e.g., "Pro Plan"
+    - **ID**: e.g., `pro_plan` (used in your code)
+    - **Price**: Set your pricing
+    - **Features**: Add features like "api_calls" or "ai_tokens"
+  </Step>
+
+  <Step title="Configure features">
+    For each feature, set:
+    - **Feature ID**: Used in `check()` and `track()` calls
+    - **Limit**: Maximum usage allowed
+    - **Reset period**: How often limits reset (daily, monthly, etc.)
+  </Step>
+</Steps>
+
+## Implement core functions
+
+Now that your product is configured, implement the three core Autumn functions:
+
+### 1. Attach a product
+
+Allow customers to subscribe or upgrade to a plan:
+
+```tsx components/UpgradeButton.tsx
+import { useCustomer } from "autumn-js/react";
+
+function UpgradeButton() {
+  const { attach } = useCustomer();
+
+  const handleUpgrade = async () => {
+    await attach({
+      productId: "pro_plan",
+      successUrl: "http://localhost:3000/success",
+    });
+  };
+
+  return (
+    <button onClick={handleUpgrade}>
+      Upgrade to Pro
+    </button>
+  );
+}
+```
+
+<Tip>
+  For new customers, `attach()` redirects to Stripe Checkout. For existing customers, it processes the change immediately.
+</Tip>
+
+### 2. Check feature access
+
+Verify whether a customer can use a feature before allowing access:
+
+```tsx components/FeatureButton.tsx
+import { useCustomer } from "autumn-js/react";
+
+function AIGenerateButton() {
+  const { check } = useCustomer();
+
+  const handleGenerate = async () => {
+    const { data } = await check({
+      featureId: "ai_tokens",
+    });
+
+    if (!data?.allowed) {
+      alert("You've reached your AI generation limit!");
+      return;
+    }
+
+    // Proceed with AI generation
+    await generateAIContent();
+  };
+
+  return (
+    <button onClick={handleGenerate}>
+      Generate with AI
+    </button>
+  );
+}
+```
+
+### 3. Track usage
+
+Record usage events to enforce limits and calculate billing:
+
+```tsx lib/ai.ts
+import { useCustomer } from "autumn-js/react";
+
+async function generateAIContent() {
+  const { track } = useCustomer();
+
+  // Generate content...
+  const tokensUsed = 1500;
+
+  // Record the usage
+  await track({
+    featureId: "ai_tokens",
+    value: tokensUsed
+  });
+
+  return content;
+}
+```
+
+<Note>
+  Always call `track()` after the user has consumed the resource, not before. This ensures accurate billing.
+</Note>
+
+## Advanced usage
+
+### Use the pre-built pricing table
+
+Autumn includes a ready-to-use pricing table component:
+
+```tsx pages/pricing.tsx
+import { PricingTable } from "autumn-js/react";
+
+export default function PricingPage() {
+  return (
+    <div className="w-full max-w-4xl mx-auto p-8">
+      <PricingTable
+        checkoutParams={{
+          successUrl: "http://localhost:3000/welcome",
+        }}
+      />
+    </div>
+  );
+}
+```
+
+### Get customer billing state
+
+Access the customer's current billing state and product details:
+
+```tsx components/BillingDashboard.tsx
+import { usePricingTable } from "autumn-js/react";
+
+function BillingDashboard() {
+  const { products } = usePricingTable();
+
+  return (
+    <div>
+      {products.map((product) => (
+        <div key={product.id}>
+          <h3>{product.name}</h3>
+          <p>Status: {product.scenario}</p>
+          {/* scenario can be: active, upgrade, downgrade, scheduled */}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card
+    title="Core Concepts"
+    icon="book"
+    href="/concepts/products"
+  >
+    Understand products, plans, features, and pricing models
+  </Card>
+  <Card
+    title="Usage-based Billing"
+    icon="chart-line"
+    href="/guides/usage-based-billing"
+  >
+    Implement metered billing with automatic limit enforcement
+  </Card>
+  <Card
+    title="Credit Systems"
+    icon="coins"
+    href="/guides/credit-systems"
+  >
+    Build prepaid credit systems for your features
+  </Card>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api/attach"
+  >
+    Explore the complete API documentation
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Authentication errors">
+    If you're seeing authentication errors:
+    - Verify your `AUTUMN_SECRET_KEY` is set correctly
+    - Ensure the backend handler is properly mounted at `/api/autumn/*`
+    - Check that `customerId` is being extracted correctly from your auth system
+  </Accordion>
+
+  <Accordion title="Attach not redirecting to Stripe">
+    For first-time customers, `attach()` should redirect to Stripe Checkout. If it's not:
+    - Verify your Stripe API keys are configured in the Autumn dashboard
+    - Check that the `productId` matches a product in your dashboard
+    - Ensure the customer doesn't already have an active subscription
+  </Accordion>
+
+  <Accordion title="Check always returns false">
+    If `check()` is denying access unexpectedly:
+    - Verify the `featureId` matches a feature in your product configuration
+    - Check if the customer has an active subscription to a plan with that feature
+    - Review the usage limits configured for that feature
+  </Accordion>
+</AccordionGroup>
+
+<Card
+  title="Need help?"
+  icon="discord"
+  href="https://discord.gg/53emPtY9tA"
+>
+  Join our Discord community for support and to connect with other developers
+</Card>

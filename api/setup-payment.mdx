@@ -1,0 +1,184 @@
+---
+title: 'Setup Payment'
+description: 'Create a payment setup session to collect payment method details without charging'
+---
+
+## POST /setup_payment
+
+Create a payment setup session for a customer. This allows you to collect payment method details from a customer without immediately charging them. Useful for setting up recurring billing or saving a payment method for future use.
+
+### Request Body
+
+<ParamField body="customer_id" type="string" required>
+  The ID of the customer to set up payment for.
+  
+  Example: `"cus_123"`
+</ParamField>
+
+<ParamField body="success_url" type="string">
+  URL to redirect to after successful payment setup. Must start with either `http://` or `https://`.
+  
+  Example: `"https://example.com/payment-setup-complete"`
+</ParamField>
+
+<ParamField body="customer_data" type="object">
+  Customer data to update or set during payment setup.
+  
+  <Expandable title="CustomerData">
+    <ParamField body="name" type="string">
+      Customer's name
+    </ParamField>
+    
+    <ParamField body="email" type="string">
+      Customer's email address (must be a valid email)
+    </ParamField>
+    
+    <ParamField body="fingerprint" type="string">
+      Unique identifier (e.g., serial number) to detect duplicate customers and prevent free trial abuse
+    </ParamField>
+    
+    <ParamField body="metadata" type="object">
+      Additional metadata for the customer
+    </ParamField>
+    
+    <ParamField body="stripe_id" type="string">
+      Stripe customer ID if you already have one
+    </ParamField>
+    
+    <ParamField body="create_in_stripe" type="boolean">
+      Whether to create the customer in Stripe
+    </ParamField>
+    
+    <ParamField body="send_email_receipts" type="boolean">
+      Whether to send email receipts to this customer
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="checkout_session_params" type="object">
+  Additional parameters for the checkout session. These parameters are passed directly to Stripe.
+</ParamField>
+
+### Response
+
+<ResponseField name="customer_id" type="string">
+  The ID of the customer.
+  
+  Example: `"cus_123"`
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  URL to the payment setup page. Redirect the customer to this URL to collect their payment method.
+  
+  Example: `"https://checkout.stripe.com/c/pay/cs_test_..."`
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://api.autumn.com/setup_payment \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "cus_123",
+    "success_url": "https://example.com/payment-setup-complete"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.autumn.com/setup_payment', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    customer_id: 'cus_123',
+    success_url: 'https://example.com/payment-setup-complete'
+  })
+});
+
+const data = await response.json();
+// Redirect user to data.url
+window.location.href = data.url;
+```
+
+```python Python
+import requests
+
+response = requests.post(
+  'https://api.autumn.com/setup_payment',
+  headers={
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  json={
+    'customer_id': 'cus_123',
+    'success_url': 'https://example.com/payment-setup-complete'
+  }
+)
+
+data = response.json()
+# Redirect user to data['url']
+print(data['url'])
+```
+
+```typescript TypeScript
+interface SetupPaymentRequest {
+  customer_id: string;
+  success_url?: string;
+  customer_data?: {
+    name?: string;
+    email?: string;
+    metadata?: Record<string, any>;
+  };
+}
+
+interface SetupPaymentResponse {
+  customer_id: string;
+  url: string;
+}
+
+const setupPayment = async (params: SetupPaymentRequest): Promise<SetupPaymentResponse> => {
+  const response = await fetch('https://api.autumn.com/setup_payment', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(params)
+  });
+  
+  return await response.json();
+};
+
+const result = await setupPayment({
+  customer_id: 'cus_123',
+  success_url: 'https://example.com/payment-setup-complete'
+});
+```
+</CodeGroup>
+
+### Example Response
+
+```json
+{
+  "customer_id": "cus_123",
+  "url": "https://checkout.stripe.com/c/pay/cs_test_a1b2c3d4e5f6g7h8i9j0"
+}
+```
+
+## Use Cases
+
+### Set up recurring billing
+
+Collect a customer's payment method before their trial ends, so you can automatically charge them when the trial expires.
+
+### Save payment method for later
+
+Allow customers to add a payment method to their account without immediately charging them.
+
+### Update payment method
+
+Let customers update their existing payment method by creating a new setup session.

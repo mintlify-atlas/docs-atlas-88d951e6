@@ -1,0 +1,395 @@
+---
+title: "React SDK"
+description: "Use Autumn with React hooks"
+icon: "react"
+---
+
+## Overview
+
+The `autumn-js` SDK provides React-specific hooks that make it easy to integrate Autumn into your React application. The hooks handle loading states, error handling, and automatic re-fetching.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install autumn-js
+```
+
+```bash yarn
+yarn add autumn-js
+```
+
+```bash pnpm
+pnpm add autumn-js
+```
+
+```bash bun
+bun add autumn-js
+```
+
+</CodeGroup>
+
+## Setup Provider
+
+Wrap your app with the `AutumnProvider` to make the SDK available throughout your component tree:
+
+```tsx App.tsx
+import { AutumnProvider } from 'autumn-js/react';
+
+function App() {
+  return (
+    <AutumnProvider
+      publicKey="your_public_key"
+      customerId="user_123"
+    >
+      <YourApp />
+    </AutumnProvider>
+  );
+}
+```
+
+<Note>
+  Get your public key from the [Autumn dashboard](https://app.useautumn.com) under **Settings → API Keys**.
+</Note>
+
+## useAutumn Hook
+
+The `useAutumn` hook provides access to all Autumn methods with React-friendly patterns:
+
+```tsx PricingPage.tsx
+import { useAutumn } from 'autumn-js/react';
+
+function PricingPage() {
+  const { attach } = useAutumn();
+
+  return (
+    <button
+      onClick={async () => {
+        await attach({ productId: 'pro' });
+      }}
+    >
+      Upgrade to Pro
+    </button>
+  );
+}
+```
+
+### Available Methods
+
+The hook returns all three core Autumn methods:
+
+```tsx
+const { attach, check, track } = useAutumn();
+```
+
+## Usage Examples
+
+### Feature Gating with check()
+
+Check if a user has access to a feature before rendering UI:
+
+```tsx FeatureComponent.tsx
+import { useAutumn } from 'autumn-js/react';
+import { useState, useEffect } from 'react';
+
+function AIFeature() {
+  const { check } = useAutumn();
+  const [access, setAccess] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const checkAccess = async () => {
+      const { data } = await check({ featureId: 'ai_tokens' });
+      setAccess(data);
+      setLoading(false);
+    };
+
+    checkAccess();
+  }, [check]);
+
+  if (loading) return <div>Loading...</div>;
+
+  if (!access.allowed) {
+    return (
+      <div>
+        <p>AI limit reached</p>
+        <p>Remaining: {access.remaining} / {access.limit}</p>
+      </div>
+    );
+  }
+
+  return <AIGenerator />;
+}
+```
+
+### Upgrade Flow with attach()
+
+Create a seamless upgrade experience:
+
+```tsx UpgradeButton.tsx
+import { useAutumn } from 'autumn-js/react';
+import { useState } from 'react';
+
+function UpgradeButton({ productId }: { productId: string }) {
+  const { attach } = useAutumn();
+  const [loading, setLoading] = useState(false);
+
+  const handleUpgrade = async () => {
+    setLoading(true);
+    try {
+      const result = await attach({ 
+        productId,
+        successUrl: window.location.href,
+        cancelUrl: window.location.href,
+      });
+
+      // If there's a checkout URL, redirect to Stripe
+      if (result.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+      } else {
+        // Otherwise, the upgrade was handled directly
+        alert('Successfully upgraded!');
+      }
+    } catch (error) {
+      alert('Failed to upgrade');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button onClick={handleUpgrade} disabled={loading}>
+      {loading ? 'Processing...' : 'Upgrade Now'}
+    </button>
+  );
+}
+```
+
+### Usage Tracking with track()
+
+Track usage when users consume metered resources:
+
+```tsx AIGenerator.tsx
+import { useAutumn } from 'autumn-js/react';
+import { useState } from 'react';
+
+function AIGenerator() {
+  const { track, check } = useAutumn();
+  const [result, setResult] = useState('');
+
+  const generateText = async () => {
+    // Check if user has tokens available
+    const { data } = await check({ 
+      featureId: 'ai_tokens',
+      value: 1000, // This generation costs 1000 tokens
+    });
+
+    if (!data.allowed) {
+      alert('Insufficient tokens');
+      return;
+    }
+
+    // Generate the text (your AI logic here)
+    const text = await callYourAI();
+    setResult(text);
+
+    // Track the usage
+    await track({
+      featureId: 'ai_tokens',
+      value: 1000,
+    });
+  };
+
+  return (
+    <div>
+      <button onClick={generateText}>Generate</button>
+      {result && <p>{result}</p>}
+    </div>
+  );
+}
+```
+
+## Integration with React Query
+
+For optimal caching and state management, integrate with React Query:
+
+```tsx useFeatureAccess.ts
+import { useQuery } from '@tanstack/react-query';
+import { useAutumn } from 'autumn-js/react';
+
+export function useFeatureAccess(featureId: string) {
+  const { check } = useAutumn();
+
+  return useQuery({
+    queryKey: ['feature-access', featureId],
+    queryFn: async () => {
+      const { data } = await check({ featureId });
+      return data;
+    },
+    staleTime: 60000, // Cache for 1 minute
+  });
+}
+
+// Usage in components
+function MyComponent() {
+  const { data: access, isLoading } = useFeatureAccess('ai_tokens');
+
+  if (isLoading) return <div>Loading...</div>;
+  if (!access.allowed) return <div>No access</div>;
+
+  return <div>Remaining: {access.remaining}</div>;
+}
+```
+
+## Integration with SWR
+
+Alternatively, use SWR for data fetching:
+
+```tsx useFeatureAccess.ts
+import useSWR from 'swr';
+import { useAutumn } from 'autumn-js/react';
+
+export function useFeatureAccess(featureId: string) {
+  const { check } = useAutumn();
+
+  return useSWR(
+    ['feature-access', featureId],
+    async () => {
+      const { data } = await check({ featureId });
+      return data;
+    },
+    {
+      refreshInterval: 60000, // Refresh every minute
+      revalidateOnFocus: true,
+    }
+  );
+}
+
+// Usage in components
+function MyComponent() {
+  const { data: access, error, isLoading } = useFeatureAccess('ai_tokens');
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error loading access</div>;
+  if (!access.allowed) return <div>No access</div>;
+
+  return <div>Remaining: {access.remaining}</div>;
+}
+```
+
+## Complete Example
+
+Here's a full example of a pricing page with Autumn:
+
+```tsx PricingPage.tsx
+import { useAutumn } from 'autumn-js/react';
+import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+
+function PricingPage() {
+  const { attach, check } = useAutumn();
+  const [loading, setLoading] = useState<string | null>(null);
+
+  // Check current plan access
+  const { data: proAccess } = useQuery({
+    queryKey: ['plan-access'],
+    queryFn: async () => {
+      const { data } = await check({ featureId: 'pro_features' });
+      return data;
+    },
+  });
+
+  const handleUpgrade = async (productId: string) => {
+    setLoading(productId);
+    try {
+      const result = await attach({ 
+        productId,
+        successUrl: `${window.location.origin}/success`,
+        cancelUrl: window.location.href,
+      });
+
+      if (result.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+      }
+    } catch (error) {
+      console.error('Upgrade failed:', error);
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  return (
+    <div className="pricing-grid">
+      <div className="plan">
+        <h2>Free</h2>
+        <p>$0/month</p>
+        <ul>
+          <li>100 AI tokens/month</li>
+          <li>Basic features</li>
+        </ul>
+        <button disabled>Current Plan</button>
+      </div>
+
+      <div className="plan">
+        <h2>Pro</h2>
+        <p>$29/month</p>
+        <ul>
+          <li>10,000 AI tokens/month</li>
+          <li>Advanced features</li>
+          <li>Priority support</li>
+        </ul>
+        <button
+          onClick={() => handleUpgrade('pro')}
+          disabled={loading === 'pro' || proAccess?.allowed}
+        >
+          {loading === 'pro' ? 'Processing...' : 
+           proAccess?.allowed ? 'Current Plan' : 'Upgrade'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default PricingPage;
+```
+
+## TypeScript Support
+
+All hooks are fully typed:
+
+```tsx
+import type { CheckResponse, AttachResponse, TrackResponse } from 'autumn-js';
+import { useAutumn } from 'autumn-js/react';
+
+function MyComponent() {
+  const { check } = useAutumn();
+
+  const handleCheck = async (): Promise<CheckResponse> => {
+    const { data } = await check({ featureId: 'ai_tokens' });
+    return data;
+  };
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="JavaScript SDK" icon="js" href="/sdks/javascript">
+  Learn about the base JavaScript SDK
+</Card>
+
+<Card title="Usage-Based Billing" icon="chart-line" href="/guides/usage-based-billing">
+  Implement metered billing in your app
+</Card>
+
+<Card title="Subscriptions" icon="calendar" href="/guides/subscriptions">
+  Set up subscription management
+</Card>
+
+<Card title="Credit Systems" icon="coins" href="/guides/credit-systems">
+  Build credit-based features
+</Card>
+
+</CardGroup>
